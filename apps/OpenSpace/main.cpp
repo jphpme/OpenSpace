@@ -70,10 +70,6 @@
 #include <dbghelp.h>
 #endif // WIN32
 
-#ifdef OPENVR_SUPPORT
-#include <SGCTOpenVR.h>
-#endif // OPENVR_SUPPORT
-
 #ifdef OPENSPACE_HAS_SPOUT
 #include <modules/spout/spoutwrapper.h>
 #endif // OPENSPACE_HAS_SPOUT
@@ -107,7 +103,6 @@ namespace {
 
 constexpr std::string_view _loggerCat = "main";
 constexpr std::string_view SpoutTag = "Spout";
-constexpr std::string_view OpenVRTag = "OpenVR";
 
 // @TODO (abock, 2020-04-09): These state variables should disappear
 const Window* currentWindow = nullptr;
@@ -115,10 +110,6 @@ const BaseViewport* currentViewport = nullptr;
 FrustumMode currentFrustumMode;
 glm::mat4 currentModelMatrix;
 glm::ivec2 currentDrawResolution;
-
-#ifdef OPENVR_SUPPORT
-Window* FirstOpenVRWindow = nullptr;
-#endif // OPENVR_SUPPORT
 
 // This value is specified from the commandline options and kept around to be run after
 // everything has been initialized. It's going to be std::nullopt unless a user wants to
@@ -388,28 +379,6 @@ void mainInitFunc(GLFWwindow*) {
     global::openSpaceEngine->initializeGL();
     LDEBUG("Initializing OpenGL in OpenSpace Engine finished");
 
-
-
-    // Find if we have at least one OpenVR window
-    // Save reference to first OpenVR window, which is the one we will copy to the HMD
-    for (const std::unique_ptr<Window>& window : Engine::instance().windows()) {
-        if (window->hasTag(OpenVRTag)) {
-#ifdef OPENVR_SUPPORT
-            FirstOpenVRWindow = window.get();
-
-            // If we have an OpenVRWindow, initialize OpenVR
-            sgct::OpenVR::initialize(
-                Engine::instance().nearClippingPlane(),
-                Engine::instance().farClippingPlane()
-            );
-#else // ^^^^ OPENVR_SUPPORT // !OPENVR_SUPPORT vvvv
-            LWARNING("OpenVR was requested, but program was compiled without VR support");
-#endif // OPENVR_SUPPORT
-
-            break;
-        }
-    }
-
     for (size_t i = 0; i < Engine::instance().windows().size(); i++) {
         const Window& window = *Engine::instance().windows()[i];
         if (!window.hasTag(SpoutTag)) {
@@ -519,13 +488,6 @@ void mainPostSyncPreDrawFunc() {
 
     global::openSpaceEngine->postSynchronizationPreDraw();
 
-#ifdef OPENVR_SUPPORT
-    if (FirstOpenVRWindow) {
-        // Update pose matrices for all tracked OpenVR devices once per frame
-        sgct::SGCTOpenVR::updatePoses();
-    }
-#endif // OPENVR_SUPPORT
-
     LTRACE("main::postSynchronizationPreDraw(end)");
 }
 
@@ -544,19 +506,13 @@ void mainRenderFunc(const sgct::RenderData& data) {
     const glm::vec3 pos = Engine::defaultUser().posMono();
     const glm::mat4 viewMatrix = data.viewMatrix * glm::translate(glm::mat4(1.f), pos);
 
-    glm::mat4 projectionMatrix = data.projectionMatrix;
-#ifdef OPENVR_SUPPORT
-    bool currentWindowIsHMD = FirstOpenVRWindow == SgctEngine->getCurrentWindowPtr();
-    if (sgct::SGCTOpenVR::isHMDActive() && currentWindowIsHMD) {
-        projectionMatrix = sgct::SGCTOpenVR::getHMDCurrentViewProjectionMatrix(
-            SgctEngine->getCurrentFrustumMode()
-        );
-    }
-#endif // OPENVR_SUPPORT
-
     try {
         currentModelMatrix = data.modelMatrix;
-        global::openSpaceEngine->render(data.modelMatrix, viewMatrix, projectionMatrix);
+        global::openSpaceEngine->render(
+            data.modelMatrix,
+            viewMatrix,
+            data.projectionMatrix
+        );
 
 #ifdef OPENSPACE_HAS_SPOUT
         for (SpoutWindow& w : SpoutWindows) {
@@ -619,13 +575,6 @@ void mainDraw2DFunc(const sgct::RenderData& data) {
 void mainPostDrawFunc() {
     ZoneScoped;
     LTRACE("main::mainPostDrawFunc(begin)");
-
-#ifdef OPENVR_SUPPORT
-    if (FirstOpenVRWindow) {
-        // Copy the first OpenVR window to the HMD
-        sgct::OpenVR::copyWindowToHMD(FirstOpenVRWindow);
-    }
-#endif // OPENVR_SUPPORT
 
     global::openSpaceEngine->postDraw();
 
@@ -1638,11 +1587,6 @@ int main(int argc, char* argv[]) {
 
     LDEBUG("Destroying SGCT Engine");
     Engine::destroy();
-
-#ifdef OPENVR_SUPPORT
-    // Clean up OpenVR
-    sgct::SGCTOpenVR::shutdown();
-#endif // OPENVR_SUPPORT
 
 #ifdef OPENSPACE_HAS_SPOUT
     for (SpoutWindow& w : SpoutWindows) {
