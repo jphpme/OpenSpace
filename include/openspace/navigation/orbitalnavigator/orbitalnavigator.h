@@ -177,6 +177,7 @@ private:
 
     BoolProperty _disableZoom;
     BoolProperty _disableRoll;
+    BoolProperty _flyAlongVRController;
 
     BoolProperty _useAdaptiveStereoscopicDepth;
     FloatProperty _stereoscopicDepthOfFocusSurface;

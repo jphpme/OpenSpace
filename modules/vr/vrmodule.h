@@ -32,7 +32,9 @@
 #include <openspace/properties/scalar/boolproperty.h>
 #include <openspace/properties/scalar/floatproperty.h>
 #include <openspace/properties/vector/vec3property.h>
+#include <array>
 #include <memory>
+#include <optional>
 
 namespace openspace {
 
@@ -40,7 +42,14 @@ namespace opengl { class ProgramObject; }
 
 /**
  * Draws the hand controllers of a VR headset, and a pointing ray from each of them, on
- * top of the rendered scene. The controller poses come from the WindowDelegate.
+ * top of the rendered scene, and lets the user grab and move the scene with them. The
+ * controller poses come from the WindowDelegate.
+ *
+ * Grabbing (holding a trigger) moves the camera directly so that the scene follows the
+ * hands. With one hand and locked navigation, the point of the focus that is under the
+ * ray stays under the ray; in free flight the camera moves opposite to the hand. With
+ * both hands, twisting the hands rotates the focus (locked) or the scene around the
+ * user (free flight), and spreading them apart zooms towards the focus (locked).
  */
 class VRModule : public OpenSpaceModule {
 public:
@@ -58,11 +67,22 @@ private:
     void renderControllers(const glm::mat4& viewMatrix,
         const glm::mat4& projectionMatrix);
 
+    void updateGrab();
+    void grabWithOneHand(const glm::mat4& previousPose, const glm::mat4& pose);
+    void grabWithTwoHands(const glm::vec3& previousHandVector,
+        const glm::vec3& handVector);
+
     BoolProperty _showControllers;
     BoolProperty _showRays;
     FloatProperty _rayLength;
     Vec3Property _controllerColor;
     Vec3Property _rayColor;
+    BoolProperty _freeFlight;
+    BoolProperty _grabEnabled;
+    FloatProperty _grabTranslationScale;
+
+    /// The controller poses of the previous frame, for the hands that were grabbing
+    std::array<std::optional<glm::mat4>, 2> _previousGrabPoses;
 
     std::unique_ptr<opengl::ProgramObject> _program;
     UniformCache(modelViewProjection, modelView, color) _uniformCache;

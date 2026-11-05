@@ -35,7 +35,8 @@ local NormalSensitivity = 5.0
 -- Locked: the left thumbstick orbits around the focus, the right one zooms (up and
 -- down) and turns the view in place (left and right).
 -- Free flight: the left thumbstick turns left and right and flies up and down, the right
--- one flies forward and back (up and down) and sideways (left and right)
+-- one flies forward and back (up and down) and sideways (left and right). Forward is
+-- along the right controller's pointing ray (see the FlyAlongVRController property)
 local LockedAxes = {
   { OpenXRControllers.LeftThumbStick.LeftRight, "Orbit X", false },
   { OpenXRControllers.LeftThumbStick.UpDown, "Orbit Y", true },
@@ -60,11 +61,17 @@ local function bindAxesCommand(axes)
   return command
 end
 
--- The bodies that locking can focus on; the one with the closest surface is picked
-local LockCandidates = { "Earth", "Moon", "Sun" }
+-- The bodies that locking can focus on (the one with the closest surface is picked) and
+-- that the fly-to buttons step through, in this order. Bodies that are not in the scene
+-- are skipped
+local Bodies = {
+  "Sun", "Mercury", "Venus", "Earth", "Moon", "Mars", "Jupiter", "Saturn", "Uranus",
+  "Neptune"
+}
+local BodiesLua = '{ "' .. table.concat(Bodies, '", "') .. '" }'
 
 local FocusClosestCommand = [[
-  local candidates = { ]] .. '"' .. table.concat(LockCandidates, '", "') .. '"' .. [[ }
+  local candidates = ]] .. BodiesLua .. [[
   local state = openspace.navigation.getNavigationState("Root")
   local anchor = openspace.worldPosition(state.Anchor)
   local camera = {
@@ -94,7 +101,8 @@ local FocusClosestCommand = [[
 local LockedMode = {
   Identifier = "os.vr.LockedNavigation",
   Name = "Locked VR navigation",
-  Command = bindAxesCommand(LockedAxes),
+  Command = bindAxesCommand(LockedAxes) ..
+    'openspace.setPropertyValueSingle("Modules.VR.FreeFlight", false)\n',
   Documentation = [[
     Bind the OpenXR controller thumbsticks to orbit around and zoom towards the focus]],
   GuiPath = "/Navigation/VR",
@@ -104,7 +112,8 @@ local LockedMode = {
 local FreeFlightMode = {
   Identifier = "os.vr.FreeFlightNavigation",
   Name = "Free flight VR navigation",
-  Command = bindAxesCommand(FreeFlightAxes),
+  Command = bindAxesCommand(FreeFlightAxes) ..
+    'openspace.setPropertyValueSingle("Modules.VR.FreeFlight", true)\n',
   Documentation = [[
     Bind the OpenXR controller thumbsticks to look around and to fly forward, back and
     sideways independently of the focus]],
@@ -146,8 +155,7 @@ local ToggleNavigationMode = {
   Identifier = "os.vr.ToggleNavigationMode",
   Name = "Toggle locked and free flight VR navigation",
   Command = string.format([[
-    local axis = openspace.navigation.joystickAxis(%q, %d)
-    if axis.Type == "Orbit X" then
+    if not openspace.propertyValue("Modules.VR.FreeFlight") then
       openspace.action.triggerAction(%q)
       %s
     else
@@ -156,7 +164,7 @@ local ToggleNavigationMode = {
       %s
     end
   ]],
-    Name, OpenXRControllers.LeftThumbStick.LeftRight, FreeFlightMode.Identifier,
+    FreeFlightMode.Identifier,
     showMessageCommand('"Free flight"'),
     FocusClosestCommand, LockedMode.Identifier,
     showMessageCommand(
@@ -164,8 +172,60 @@ local ToggleNavigationMode = {
     )
   ),
   Documentation = [[
-    Switches between free flight and locked navigation. Locking focuses on the closest
-    of the Earth, the Moon and the Sun]],
+    Switches between free flight and locked navigation. Locking focuses on the body with
+    the closest surface]],
+  GuiPath = "/Navigation/VR",
+  IsLocal = true
+}
+
+-- Returns Lua code that flies to the body `step` places after (or before, if negative)
+-- the current focus in `Bodies`, and switches to locked navigation
+local function flyToBodyCommand(step)
+  return string.format([[
+    local bodies = %s
+    local anchor = openspace.propertyValue("NavigationHandler.OrbitalNavigator.Anchor")
+    local index = 0
+    for i, id in ipairs(bodies) do
+      if id == anchor then
+        index = i
+      end
+    end
+    local target = nil
+    for _ = 1, #bodies do
+      index = (index - 1 + %d) %% #bodies + 1
+      if openspace.hasSceneGraphNode(bodies[index]) then
+        target = bodies[index]
+        break
+      end
+    end
+    if target then
+      openspace.navigation.flyTo(target)
+      openspace.action.triggerAction(%q)
+      %s
+    end
+  ]],
+    BodiesLua, step, LockedMode.Identifier, showMessageCommand('"Flying to " .. target')
+  )
+end
+
+local FlyToNextBody = {
+  Identifier = "os.vr.FlyToNextBody",
+  Name = "Fly to the next body",
+  Command = flyToBodyCommand(1),
+  Documentation = [[
+    Flies to the next of the Sun, the planets and the Moon, ordered by distance from
+    the Sun, and locks onto it]],
+  GuiPath = "/Navigation/VR",
+  IsLocal = true
+}
+
+local FlyToPreviousBody = {
+  Identifier = "os.vr.FlyToPreviousBody",
+  Name = "Fly to the previous body",
+  Command = flyToBodyCommand(-1),
+  Documentation = [[
+    Flies to the previous of the Sun, the planets and the Moon, ordered by distance from
+    the Sun, and locks onto it]],
   GuiPath = "/Navigation/VR",
   IsLocal = true
 }
@@ -208,17 +268,18 @@ local function bindInputs()
     )
   end
 
+  -- Right hand: travel between bodies. Left hand: time
   openspace.navigation.bindJoystickButton(
     Name,
     controller.A,
-    "openspace.navigation.retargetAnchor()",
-    "Look at the current focus"
+    "openspace.action.triggerAction('" .. FlyToNextBody.Identifier .. "')",
+    "Fly to the next body"
   )
   openspace.navigation.bindJoystickButton(
     Name,
     controller.B,
-    "openspace.time.interpolateTogglePause()",
-    "Pause or resume the time simulation"
+    "openspace.action.triggerAction('" .. FlyToPreviousBody.Identifier .. "')",
+    "Fly to the previous body"
   )
   openspace.navigation.bindJoystickButton(
     Name,
@@ -235,6 +296,12 @@ local function bindInputs()
   openspace.navigation.bindJoystickButton(
     Name,
     controller.LeftStickButton,
+    "openspace.time.interpolateTogglePause()",
+    "Pause or resume the time simulation"
+  )
+  openspace.navigation.bindJoystickButton(
+    Name,
+    controller.Menu,
     "openspace.time.interpolateDeltaTime(1)",
     "Reset to realtime"
   )
@@ -246,11 +313,15 @@ asset.onInitialize(function()
   openspace.action.registerAction(LockedMode)
   openspace.action.registerAction(FreeFlightMode)
   openspace.action.registerAction(ToggleNavigationMode)
+  openspace.action.registerAction(FlyToNextBody)
+  openspace.action.registerAction(FlyToPreviousBody)
   bindInputs()
 end)
 
 asset.onDeinitialize(function()
   openspace.navigation.unbindJoystick(Name)
+  openspace.action.removeAction(FlyToPreviousBody)
+  openspace.action.removeAction(FlyToNextBody)
   openspace.action.removeAction(ToggleNavigationMode)
   openspace.action.removeAction(FreeFlightMode)
   openspace.action.removeAction(LockedMode)
@@ -260,6 +331,8 @@ end)
 asset.export("LockedMode", LockedMode.Identifier)
 asset.export("FreeFlightMode", FreeFlightMode.Identifier)
 asset.export("ToggleNavigationMode", ToggleNavigationMode.Identifier)
+asset.export("FlyToNextBody", FlyToNextBody.Identifier)
+asset.export("FlyToPreviousBody", FlyToPreviousBody.Identifier)
 
 
 
@@ -269,10 +342,11 @@ asset.meta = {
     Navigation with the hand controllers of an OpenXR headset. Locked on a body: the
     left thumbstick orbits, the right thumbstick zooms and turns. Free flight: the left
     thumbstick turns and flies up and down, the right thumbstick flies forward, back and
-    sideways.
-    Clicking the right thumbstick switches between the two, and locking focuses on the
-    closest body. Holding a grip slows down movement, A looks at the focus, B pauses
-    time, X and Y step time backwards and forwards
+    sideways along the right controller's ray. Clicking the right thumbstick switches
+    between the two, and locking focuses on the closest body. A and B fly to the next
+    and previous body. Holding a grip slows down movement. X and Y step time backwards
+    and forwards, the left thumbstick click pauses time and the menu button returns to
+    realtime
   ]],
   Author = "OpenSpace in VR",
   URL = "https://github.com/jphpme/OpenSpace",
