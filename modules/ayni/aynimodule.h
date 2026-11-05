@@ -27,18 +27,35 @@
 
 #include <openspace/util/openspacemodule.h>
 
+#include <memory>
+
 namespace openspace {
+
+namespace ayni { class StreamAccess; }
 
 class AyniModule : public OpenSpaceModule {
 public:
     constexpr static const char* Name = "Ayni";
 
     AyniModule();
+    ~AyniModule() override;
 
     std::vector<openspace::Documentation> documentations() const override;
 
+    /**
+     * Returns the stream token holder that all AYNI layers share. It is created, and the
+     * connection file read, on the first call.
+     *
+     * 	hrow RuntimeError If the connection file cannot be used
+     */
+    ayni::StreamAccess& streamAccess();
+
 protected:
     void internalInitialize(const Dictionary& dict) override;
+    void internalDeinitialize() override;
+
+private:
+    std::unique_ptr<ayni::StreamAccess> _streamAccess;
 };
 
 } // namespace openspace

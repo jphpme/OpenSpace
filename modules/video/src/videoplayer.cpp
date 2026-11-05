@@ -41,6 +41,7 @@
 #include <openspace/util/time.h>
 #include <openspace/util/timemanager.h>
 #include <render_gl.h>
+#include <algorithm>
 #include <cstdlib>
 #include <optional>
 
@@ -423,7 +424,23 @@ void VideoPlayer::initialize() {
 }
 
 void VideoPlayer::setMpvOption(std::string name, std::string value) {
-    _mpvOptions.emplace_back(std::move(name), std::move(value));
+    if (_isInitialized) {
+        setPropertyStringMpv(name.c_str(), value.c_str());
+    }
+
+    auto it = std::find_if(
+        _mpvOptions.begin(),
+        _mpvOptions.end(),
+        [&name](const std::pair<std::string, std::string>& option) {
+            return option.first == name;
+        }
+    );
+    if (it != _mpvOptions.end()) {
+        it->second = std::move(value);
+    }
+    else {
+        _mpvOptions.emplace_back(std::move(name), std::move(value));
+    }
 }
 
 void VideoPlayer::initializeMpv() {

@@ -30,6 +30,7 @@
 #include <modules/ayni/src/aynirelease.h>
 #include <modules/video/include/videoplayer.h>
 #include <openspace/opengl/uniformcache.h>
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <string>
@@ -71,10 +72,12 @@ private:
     /// Colours the current video frame into `_colorTexture`
     void colorFrame();
 
-    /// The licence token that is sent to the stream host, if this installation has one
-    std::optional<std::string> _streamToken;
     ayni::Release _release;
     VideoPlayer _videoPlayer;
+    /// The `ayni::StreamAccess::generation` of the token that libmpv sends
+    int _tokenGeneration = 0;
+    /// When the token that libmpv sends expires
+    std::chrono::steady_clock::time_point _tokenExpiresAt;
 
     std::unique_ptr<opengl::ProgramObject> _program;
     UniformCache(videoFrame, palette, dataRegionOffset) _uniformCache;

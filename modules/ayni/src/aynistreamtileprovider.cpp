@@ -24,11 +24,13 @@
 
 #include <modules/ayni/src/aynistreamtileprovider.h>
 
-#include <modules/ayni/src/aynilicence.h>
+#include <modules/ayni/aynimodule.h>
+#include <modules/ayni/src/ayniconnection.h>
 #include <modules/globebrowsing/src/basictypes.h>
 #include <modules/globebrowsing/src/tileindex.h>
 #include <openspace/documentation/documentation.h>
 #include <openspace/engine/globals.h>
+#include <openspace/engine/moduleengine.h>
 #include <openspace/filesystem/filesystem.h>
 #include <openspace/logging/logmanager.h>
 #include <openspace/misc/dictionary.h>
@@ -57,13 +59,18 @@ namespace {
     // the stream's release covers. The frames carry measurements rather than pictures;
     // they are coloured with the palette the release declares, codes that mean no data
     // are transparent, and the calibration strip at the edge of every frame is cropped
-    // off.
+    // off. Licensed streams need the OpenSpace connection file of an AYNI XR plan in
+    // `${USER}/ayni/connection.json`.
     struct [[codegen::Dictionary(AyniStreamTileProvider)]] Parameters {
         // The URL of the stream's release pointer (its `latest.json`) or of one of its
         // releases (a `release.json`). The pointer is read once, when the layer is
         // created.
         std::string url;
     };
+
+    ayni::StreamAccess& streamAccess() {
+        return global::moduleEngine->module<AyniModule>()->streamAccess();
+    }
 
     std::string authorizationHeader(const std::string& token) {
         return std::format("Authorization: Bearer {}", token);
@@ -84,7 +91,8 @@ namespace {
         if (!success) {
             const std::string hint = token.has_value() || !ayni::isOnStreamHost(url) ?
                 "" :
-                ". Licensed streams need a licence key in ${USER}/ayni/licence.key";
+                ". Licensed streams need an AYNI XR connection file in "
+                "${USER}/ayni/connection.json";
             throw RuntimeError(
                 std::format("Could not read '{}'{}", url, hint),
                 std::string(_loggerCat)
@@ -164,20 +172,20 @@ Documentation AyniStreamTileProvider::Documentation() {
 }
 
 AyniStreamTileProvider::AyniStreamTileProvider(const Dictionary& dictionary)
-    : _streamToken(ayni::streamToken())
-    , _release(loadRelease(codegen::bake<Parameters>(dictionary).url, _streamToken))
+    : _release(
+        loadRelease(codegen::bake<Parameters>(dictionary).url, streamAccess().token())
+    )
     , _videoPlayer(videoPlayerDictionary(_release))
 {
     ZoneScoped;
 
-    // @TODO (2026-11-05, jphpme) The stream host accepts a token for 24 hours; renew it
-    // in libmpv for installations that run longer than that
-    if (_streamToken.has_value()) {
-        _videoPlayer.setMpvOption(
-            "http-header-fields",
-            authorizationHeader(*_streamToken)
-        );
+    ayni::StreamAccess& access = streamAccess();
+    const std::optional<std::string> token = access.token();
+    if (token.has_value()) {
+        _videoPlayer.setMpvOption("http-header-fields", authorizationHeader(*token));
     }
+    _tokenGeneration = access.generation();
+    _tokenExpiresAt = access.expiresAt();
     addPropertySubOwner(_videoPlayer);
 }
 
@@ -246,6 +254,27 @@ void AyniStreamTileProvider::internalDeinitialize() {
 
 void AyniStreamTileProvider::update() {
     ZoneScoped;
+
+    // A token lives for ten minutes; libmpv sends the newest one with every request
+    ayni::StreamAccess& access = streamAccess();
+    if (access.hasConnection()) {
+        access.update();
+        if (access.generation() != _tokenGeneration) {
+            // libmpv stops playing at the first segment that the stream host refused,
+            // so a token that came after the old one expired needs a reload
+            const bool hasLapsed = std::chrono::steady_clock::now() >= _tokenExpiresAt;
+            _tokenGeneration = access.generation();
+            _tokenExpiresAt = access.expiresAt();
+            _videoPlayer.setMpvOption(
+                "http-header-fields",
+                authorizationHeader(*access.token())
+            );
+            if (hasLapsed) {
+                LINFO("Reloading the stream with a new token");
+                _videoPlayer.reload();
+            }
+        }
+    }
 
     _videoPlayer.update();
     if (_program && _program->isDirty()) [[unlikely]] {
