@@ -54,6 +54,8 @@ public:
     double truckMovementVelocity() const;
     double localRollVelocity() const;
     double globalRollVelocity() const;
+    /// Movement in the camera's own frame: `x` to the right, `y` forward
+    glm::dvec2 freeFlightVelocity() const;
 
     void resetVelocities();
 
@@ -70,6 +72,7 @@ protected:
         std::optional<double> localRoll;
         std::optional<double> globalRoll;
         std::optional<glm::dvec2> localRotation; // Pan
+        std::optional<glm::dvec2> freeFlight; // Strafe (x) and forward (y)
     };
 
     void updateVelocities(const UpdateStates& updateState, double deltaTime);
@@ -81,6 +84,7 @@ protected:
     DampenedVelocity<double> _truckMovementVelocity;
     DampenedVelocity<double> _localRollVelocity;
     DampenedVelocity<double> _globalRollVelocity;
+    DampenedVelocity<glm::dvec2> _freeFlightVelocity;
 };
 
 } // namespace openspace

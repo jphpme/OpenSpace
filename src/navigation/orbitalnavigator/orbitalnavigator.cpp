@@ -38,6 +38,7 @@
 #include <openspace/util/syncable.h>
 #include <openspace/util/updatestructures.h>
 #include <openspace/query/query.h>
+#include <openspace/scene/scene.h>
 #include <openspace/engine/globals.h>
 #include <openspace/events/event.h>
 #include <openspace/events/eventengine.h>
@@ -827,6 +828,14 @@ void OrbitalNavigator::updateCameraStateFromStates(double deltaTime) {
             posHandle
         );
 
+        pose.position = translateFreely(
+            deltaTime,
+            pose.position,
+            composeCameraRotation(camRot),
+            anchorPos,
+            posHandle
+        );
+
         pose.position = pushToSurface(pose.position, anchorPos, posHandle);
     }
 
@@ -1499,6 +1508,48 @@ glm::dvec3 OrbitalNavigator::translateVertically(double deltaTime,
     const double totalVelocity = _inputHandler.truckMovementVelocity();
 
     return cameraPosition - actualSurfaceToCamera * totalVelocity * deltaTime;
+}
+
+glm::dvec3 OrbitalNavigator::translateFreely(double deltaTime,
+                                             const glm::dvec3& cameraPosition,
+                                             const glm::dquat& cameraRotation,
+                                             const glm::dvec3& objectPosition,
+                                    const SurfacePositionHandle& positionHandle) const
+{
+    const glm::dvec2 velocity = _inputHandler.freeFlightVelocity();
+    if (velocity == glm::dvec2(0.0)) {
+        return cameraPosition;
+    }
+
+    // Same distance to the anchor's actual surface as used for the vertical translation
+    const glm::dvec3 centerToActualSurfaceModelSpace =
+        positionHandle.centerToReferenceSurface +
+        positionHandle.referenceSurfaceOutDirection * positionHandle.heightToSurface;
+    const glm::dvec3 centerToActualSurface =
+        glm::dmat3(_anchorNode->modelTransform()) * centerToActualSurfaceModelSpace;
+    double distance =
+        glm::length(cameraPosition - objectPosition - centerToActualSurface);
+
+    // Flying away from the anchor towards another object should slow down when getting
+    // close to that object, so the closest surface of any node decides the speed. Nodes
+    // whose interaction sphere contains the camera do not limit the speed
+    for (const SceneGraphNode* node : sceneGraph()->allSceneGraphNodes()) {
+        const double radius = node->interactionSphere();
+        if (radius <= 0.0) {
+            continue;
+        }
+        const double d = glm::length(node->worldPosition() - cameraPosition) - radius;
+        if (d > 0.0) {
+            distance = std::min(distance, d);
+        }
+    }
+
+    const glm::dvec3 forward = cameraRotation * Camera::ViewDirectionCameraSpace;
+    const glm::dvec3 right = glm::normalize(
+        glm::cross(forward, cameraRotation * Camera::UpDirectionCameraSpace)
+    );
+    const glm::dvec3 direction = forward * velocity.y + right * velocity.x;
+    return cameraPosition + direction * distance * deltaTime;
 }
 
 glm::dquat OrbitalNavigator::rotateHorizontally(double deltaTime,

@@ -173,6 +173,18 @@ void JoystickCameraStates::updateVelocitiesFromInput(
                     }
                     (*deltaStates.localRotation).y += value;
                     break;
+                case AxisType::FlyForward:
+                    if (!deltaStates.freeFlight.has_value()) {
+                        deltaStates.freeFlight = glm::dvec2(0.0);
+                    }
+                    (*deltaStates.freeFlight).y += value;
+                    break;
+                case AxisType::FlyRight:
+                    if (!deltaStates.freeFlight.has_value()) {
+                        deltaStates.freeFlight = glm::dvec2(0.0);
+                    }
+                    (*deltaStates.freeFlight).x += value;
+                    break;
                 case AxisType::Property:
                     const std::string script = std::format(
                         "openspace.setPropertyValue('{}', {});",

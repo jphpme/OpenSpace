@@ -51,6 +51,10 @@ public:
         GlobalRoll,
         PanX,
         PanY,
+        /// Move along the camera's view direction
+        FlyForward,
+        /// Move sideways, perpendicular to the camera's view direction
+        FlyRight,
         Property
     };
 
@@ -185,6 +189,8 @@ inline std::string to_string(const openspace::JoystickCameraStates::AxisType& va
         case T::GlobalRoll: return "GlobalRoll";
         case T::PanX:       return "Pan X";
         case T::PanY:       return "Pan Y";
+        case T::FlyForward: return "Fly Forward";
+        case T::FlyRight:   return "Fly Right";
         case T::Property:   return "Property";
         default:            return "";
     }
@@ -204,6 +210,8 @@ constexpr openspace::JoystickCameraStates::AxisType from_string(std::string_view
     if (string == "GlobalRoll") { return T::GlobalRoll; }
     if (string == "Pan X") { return T::PanX; }
     if (string == "Pan Y") { return T::PanY; }
+    if (string == "Fly Forward") { return T::FlyForward; }
+    if (string == "Fly Right") { return T::FlyRight; }
     if (string == "Property") { return T::Property; }
 
     throw RuntimeError(std::format("Unknown axis type '{}'", string), "Joystick");

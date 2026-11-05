@@ -309,6 +309,17 @@ private:
         const SurfacePositionHandle& positionHandle) const;
 
     /**
+     * Moves the camera along its own view and right directions, independent of the
+     * anchor node. The speed is proportional to the distance to the closest surface of
+     * any scene graph node (including the anchor node), like the vertical translation.
+     *
+     * \return The moved camera position
+     */
+    glm::dvec3 translateFreely(double deltaTime, const glm::dvec3& cameraPosition,
+        const glm::dquat& cameraRotation, const glm::dvec3& objectPosition,
+        const SurfacePositionHandle& positionHandle) const;
+
+    /**
      * Rotates the camera around the out vector of the surface.
      *
      * \return A quaternion adjusted to rotate around the out vector of the surface
