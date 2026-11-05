@@ -31,6 +31,112 @@ local Name = "OpenXR Controllers"
 local PrecisionSensitivity = 1.0
 local NormalSensitivity = 5.0
 
+-- The thumbstick axes of the two navigation modes, as { axis, axis type, inverted }.
+-- Locked: the left thumbstick orbits around the focus, the right one zooms (up and
+-- down) and turns the view in place (left and right).
+-- Free flight: the left thumbstick turns left and right and flies up and down, the right
+-- one flies forward and back (up and down) and sideways (left and right)
+local LockedAxes = {
+  { OpenXRControllers.LeftThumbStick.LeftRight, "Orbit X", false },
+  { OpenXRControllers.LeftThumbStick.UpDown, "Orbit Y", true },
+  { OpenXRControllers.RightThumbStick.UpDown, "Zoom", true },
+  { OpenXRControllers.RightThumbStick.LeftRight, "Pan X", true }
+}
+local FreeFlightAxes = {
+  { OpenXRControllers.LeftThumbStick.LeftRight, "Pan X", true },
+  { OpenXRControllers.LeftThumbStick.UpDown, "Fly Up", true },
+  { OpenXRControllers.RightThumbStick.UpDown, "Fly Forward", true },
+  { OpenXRControllers.RightThumbStick.LeftRight, "Fly Right", false }
+}
+
+local function bindAxesCommand(axes)
+  local command = ""
+  for _, axis in ipairs(axes) do
+    command = command .. string.format(
+      "openspace.navigation.bindJoystickAxis(%q, %d, %q, %s)\n",
+      Name, axis[1], axis[2], tostring(axis[3])
+    )
+  end
+  return command
+end
+
+-- The bodies that locking can focus on; the one with the closest surface is picked
+local LockCandidates = { "Earth", "Moon", "Sun" }
+
+local FocusClosestCommand = [[
+  local candidates = { ]] .. '"' .. table.concat(LockCandidates, '", "') .. '"' .. [[ }
+  local state = openspace.navigation.getNavigationState("Root")
+  local anchor = openspace.worldPosition(state.Anchor)
+  local camera = {
+    anchor[1] + state.Position[1],
+    anchor[2] + state.Position[2],
+    anchor[3] + state.Position[3]
+  }
+  local closest = nil
+  local closestDistance = math.huge
+  for _, id in ipairs(candidates) do
+    if openspace.hasSceneGraphNode(id) then
+      local p = openspace.worldPosition(id)
+      local distance = math.sqrt(
+        (p[1] - camera[1])^2 + (p[2] - camera[2])^2 + (p[3] - camera[3])^2
+      ) - openspace.interactionSphere(id)
+      if distance < closestDistance then
+        closest = id
+        closestDistance = distance
+      end
+    end
+  end
+  if closest then
+    openspace.navigation.setFocus(closest)
+  end
+]]
+
+local LockedMode = {
+  Identifier = "os.vr.LockedNavigation",
+  Name = "Locked VR navigation",
+  Command = bindAxesCommand(LockedAxes),
+  Documentation = [[
+    Bind the OpenXR controller thumbsticks to orbit around and zoom towards the focus]],
+  GuiPath = "/Navigation/VR",
+  IsLocal = true
+}
+
+local FreeFlightMode = {
+  Identifier = "os.vr.FreeFlightNavigation",
+  Name = "Free flight VR navigation",
+  Command = bindAxesCommand(FreeFlightAxes),
+  Documentation = [[
+    Bind the OpenXR controller thumbsticks to look around and to fly forward, back and
+    sideways independently of the focus]],
+  GuiPath = "/Navigation/VR",
+  IsLocal = true
+}
+
+local ToggleNavigationMode = {
+  Identifier = "os.vr.ToggleNavigationMode",
+  Name = "Toggle locked and free flight VR navigation",
+  Command = string.format([[
+    local axis = openspace.navigation.joystickAxis(%q, %d)
+    if axis.Type == "Orbit X" then
+      openspace.action.triggerAction(%q)
+      openspace.printInfo("VR navigation: free flight")
+    else
+      %s
+      openspace.action.triggerAction(%q)
+      openspace.printInfo("VR navigation: locked on " ..
+        openspace.propertyValue("NavigationHandler.OrbitalNavigator.Anchor"))
+    end
+  ]],
+    Name, OpenXRControllers.LeftThumbStick.LeftRight, FreeFlightMode.Identifier,
+    FocusClosestCommand, LockedMode.Identifier
+  ),
+  Documentation = [[
+    Switches between free flight and locked navigation. Locking focuses on the closest
+    of the Earth, the Moon and the Sun]],
+  GuiPath = "/Navigation/VR",
+  IsLocal = true
+}
+
 local function bindInputs()
   local controller = OpenXRControllers
   local deadzone = 0.15
@@ -40,21 +146,12 @@ local function bindInputs()
   openspace.navigation.setAxisDeadZone(Name, controller.RightThumbStick.LeftRight, deadzone)
   openspace.navigation.setAxisDeadZone(Name, controller.RightThumbStick.UpDown, deadzone)
 
-  -- Left thumbstick orbits around the focus, the right one zooms (up and down) and
-  -- turns the view in place (left and right)
-  openspace.navigation.bindJoystickAxis(Name, controller.LeftThumbStick.LeftRight, "Orbit X")
-  openspace.navigation.bindJoystickAxis(
+  openspace.action.triggerAction(LockedMode.Identifier)
+  openspace.navigation.bindJoystickButton(
     Name,
-    controller.LeftThumbStick.UpDown,
-    "Orbit Y",
-    true
-  )
-  openspace.navigation.bindJoystickAxis(Name, controller.RightThumbStick.UpDown, "Zoom", true)
-  openspace.navigation.bindJoystickAxis(
-    Name,
-    controller.RightThumbStick.LeftRight,
-    "Pan X",
-    true
+    controller.RightStickButton,
+    "openspace.action.triggerAction('" .. ToggleNavigationMode.Identifier .. "')",
+    "Switch between locked navigation and free flight"
   )
 
   -- Holding a grip makes all movement slower for fine adjustments
@@ -112,21 +209,35 @@ end
 
 
 asset.onInitialize(function()
+  openspace.action.registerAction(LockedMode)
+  openspace.action.registerAction(FreeFlightMode)
+  openspace.action.registerAction(ToggleNavigationMode)
   bindInputs()
 end)
 
 asset.onDeinitialize(function()
   openspace.navigation.unbindJoystick(Name)
+  openspace.action.removeAction(ToggleNavigationMode)
+  openspace.action.removeAction(FreeFlightMode)
+  openspace.action.removeAction(LockedMode)
 end)
+
+asset.export("LockedMode", LockedMode.Identifier)
+asset.export("FreeFlightMode", FreeFlightMode.Identifier)
+asset.export("ToggleNavigationMode", ToggleNavigationMode.Identifier)
 
 
 
 asset.meta = {
   Name = "Joystick controller: OpenXR controllers",
   Description = [[
-    Navigation with the hand controllers of an OpenXR headset: the left thumbstick
-    orbits, the right thumbstick zooms and turns, holding a grip slows down movement,
-    A looks at the focus, B pauses time, X and Y step time backwards and forwards
+    Navigation with the hand controllers of an OpenXR headset. Locked on a body: the
+    left thumbstick orbits, the right thumbstick zooms and turns. Free flight: the left
+    thumbstick turns and flies up and down, the right thumbstick flies forward, back and
+    sideways.
+    Clicking the right thumbstick switches between the two, and locking focuses on the
+    closest body. Holding a grip slows down movement, A looks at the focus, B pauses
+    time, X and Y step time backwards and forwards
   ]],
   Author = "OpenSpace in VR",
   URL = "https://github.com/jphpme/OpenSpace",

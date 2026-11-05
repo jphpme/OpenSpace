@@ -217,6 +217,14 @@ double OrbitalInputHandler::truckMovementVelocity() const {
         _touchStates.truckMovementVelocity();
 }
 
+glm::dvec3 OrbitalInputHandler::freeFlightVelocity() const {
+    return _mouseStates.freeFlightVelocity() +
+        _joystickStates.freeFlightVelocity() +
+        _websocketStates.freeFlightVelocity() +
+        _scriptStates.freeFlightVelocity() +
+        _touchStates.freeFlightVelocity();
+}
+
 void OrbitalInputHandler::updateStatesFromInput(double deltaTime) {
     _touchStates.updateVelocitiesFromInput(
         global::interactionHandler->touchInputState(),

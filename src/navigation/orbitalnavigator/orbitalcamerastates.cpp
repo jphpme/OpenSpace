@@ -33,6 +33,7 @@ OrbitalCameraStates::OrbitalCameraStates(double sensitivity, double velocityScal
     , _truckMovementVelocity(velocityScaleFactor)
     , _localRollVelocity(velocityScaleFactor)
     , _globalRollVelocity(velocityScaleFactor)
+    , _freeFlightVelocity(velocityScaleFactor)
 {}
 
 void OrbitalCameraStates::setRotationalFriction(bool enabled) {
@@ -47,6 +48,7 @@ void OrbitalCameraStates::setHorizontalFriction(bool enabled) {
 
 void OrbitalCameraStates::setVerticalFriction(bool enabled) {
     _truckMovementVelocity.setFriction(enabled);
+    _freeFlightVelocity.setFriction(enabled);
 }
 
 void OrbitalCameraStates::setSensitivity(double sensitivity) {
@@ -59,6 +61,7 @@ void OrbitalCameraStates::setVelocityScaleFactor(double scaleFactor) {
     _truckMovementVelocity.setScaleFactor(scaleFactor);
     _localRollVelocity.setScaleFactor(scaleFactor);
     _globalRollVelocity.setScaleFactor(scaleFactor);
+    _freeFlightVelocity.setScaleFactor(scaleFactor);
 }
 
 void OrbitalCameraStates::resetVelocities() {
@@ -67,12 +70,14 @@ void OrbitalCameraStates::resetVelocities() {
     _truckMovementVelocity.setImmediate(0.0);
     _localRollVelocity.setImmediate(0.0);
     _globalRollVelocity.setImmediate(0.0);
+    _freeFlightVelocity.setImmediate(glm::dvec3(0.0));
 }
 
 bool OrbitalCameraStates::hasNonZeroVelocities(bool checkOnlyMovement) const {
     glm::dvec2 sum = glm::dvec2(0.0);
     sum += globalRotationVelocity();
     sum += truckMovementVelocity();
+    sum += glm::length(freeFlightVelocity());
     if (!checkOnlyMovement) {
         sum += localRotationVelocity();
         sum += localRotationVelocity();
@@ -104,6 +109,10 @@ double OrbitalCameraStates::globalRollVelocity() const{
     return _globalRollVelocity.get();
 }
 
+glm::dvec3 OrbitalCameraStates::freeFlightVelocity() const {
+    return _freeFlightVelocity.get();
+}
+
 void OrbitalCameraStates::updateVelocities(const UpdateStates& updateState,
                                            double deltaTime)
 {
@@ -112,6 +121,7 @@ void OrbitalCameraStates::updateVelocities(const UpdateStates& updateState,
     _truckMovementVelocity.update(updateState.zoom, deltaTime);
     _localRollVelocity.update(updateState.localRoll, deltaTime);
     _globalRollVelocity.update(updateState.globalRoll, deltaTime);
+    _freeFlightVelocity.update(updateState.freeFlight, deltaTime);
 }
 
 } // namespace openspace
