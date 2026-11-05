@@ -70,14 +70,14 @@ void OrbitalCameraStates::resetVelocities() {
     _truckMovementVelocity.setImmediate(0.0);
     _localRollVelocity.setImmediate(0.0);
     _globalRollVelocity.setImmediate(0.0);
-    _freeFlightVelocity.setImmediate(glm::dvec2(0.0));
+    _freeFlightVelocity.setImmediate(glm::dvec3(0.0));
 }
 
 bool OrbitalCameraStates::hasNonZeroVelocities(bool checkOnlyMovement) const {
     glm::dvec2 sum = glm::dvec2(0.0);
     sum += globalRotationVelocity();
     sum += truckMovementVelocity();
-    sum += glm::abs(freeFlightVelocity());
+    sum += glm::length(freeFlightVelocity());
     if (!checkOnlyMovement) {
         sum += localRotationVelocity();
         sum += localRotationVelocity();
@@ -109,7 +109,7 @@ double OrbitalCameraStates::globalRollVelocity() const{
     return _globalRollVelocity.get();
 }
 
-glm::dvec2 OrbitalCameraStates::freeFlightVelocity() const {
+glm::dvec3 OrbitalCameraStates::freeFlightVelocity() const {
     return _freeFlightVelocity.get();
 }
 

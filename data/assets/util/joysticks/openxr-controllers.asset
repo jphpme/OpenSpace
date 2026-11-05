@@ -34,8 +34,8 @@ local NormalSensitivity = 5.0
 -- The thumbstick axes of the two navigation modes, as { axis, axis type, inverted }.
 -- Locked: the left thumbstick orbits around the focus, the right one zooms (up and
 -- down) and turns the view in place (left and right).
--- Free flight: the left thumbstick looks around, the right one flies forward and back
--- (up and down) and sideways (left and right)
+-- Free flight: the left thumbstick turns left and right and flies up and down, the right
+-- one flies forward and back (up and down) and sideways (left and right)
 local LockedAxes = {
   { OpenXRControllers.LeftThumbStick.LeftRight, "Orbit X", false },
   { OpenXRControllers.LeftThumbStick.UpDown, "Orbit Y", true },
@@ -44,7 +44,7 @@ local LockedAxes = {
 }
 local FreeFlightAxes = {
   { OpenXRControllers.LeftThumbStick.LeftRight, "Pan X", true },
-  { OpenXRControllers.LeftThumbStick.UpDown, "Pan Y", true },
+  { OpenXRControllers.LeftThumbStick.UpDown, "Fly Up", true },
   { OpenXRControllers.RightThumbStick.UpDown, "Fly Forward", true },
   { OpenXRControllers.RightThumbStick.LeftRight, "Fly Right", false }
 }
@@ -233,7 +233,8 @@ asset.meta = {
   Description = [[
     Navigation with the hand controllers of an OpenXR headset. Locked on a body: the
     left thumbstick orbits, the right thumbstick zooms and turns. Free flight: the left
-    thumbstick looks around, the right thumbstick flies forward, back and sideways.
+    thumbstick turns and flies up and down, the right thumbstick flies forward, back and
+    sideways.
     Clicking the right thumbstick switches between the two, and locking focuses on the
     closest body. Holding a grip slows down movement, A looks at the focus, B pauses
     time, X and Y step time backwards and forwards

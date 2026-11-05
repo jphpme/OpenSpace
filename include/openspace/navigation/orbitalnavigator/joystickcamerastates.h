@@ -55,6 +55,8 @@ public:
         FlyForward,
         /// Move sideways, perpendicular to the camera's view direction
         FlyRight,
+        /// Move along the camera's up direction
+        FlyUp,
         Property
     };
 
@@ -191,6 +193,7 @@ inline std::string to_string(const openspace::JoystickCameraStates::AxisType& va
         case T::PanY:       return "Pan Y";
         case T::FlyForward: return "Fly Forward";
         case T::FlyRight:   return "Fly Right";
+        case T::FlyUp:      return "Fly Up";
         case T::Property:   return "Property";
         default:            return "";
     }
@@ -212,6 +215,7 @@ constexpr openspace::JoystickCameraStates::AxisType from_string(std::string_view
     if (string == "Pan Y") { return T::PanY; }
     if (string == "Fly Forward") { return T::FlyForward; }
     if (string == "Fly Right") { return T::FlyRight; }
+    if (string == "Fly Up") { return T::FlyUp; }
     if (string == "Property") { return T::Property; }
 
     throw RuntimeError(std::format("Unknown axis type '{}'", string), "Joystick");

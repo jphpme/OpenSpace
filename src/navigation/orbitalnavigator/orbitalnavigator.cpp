@@ -1516,8 +1516,8 @@ glm::dvec3 OrbitalNavigator::translateFreely(double deltaTime,
                                              const glm::dvec3& objectPosition,
                                     const SurfacePositionHandle& positionHandle) const
 {
-    const glm::dvec2 velocity = _inputHandler.freeFlightVelocity();
-    if (velocity == glm::dvec2(0.0)) {
+    const glm::dvec3 velocity = _inputHandler.freeFlightVelocity();
+    if (velocity == glm::dvec3(0.0)) {
         return cameraPosition;
     }
 
@@ -1545,10 +1545,10 @@ glm::dvec3 OrbitalNavigator::translateFreely(double deltaTime,
     }
 
     const glm::dvec3 forward = cameraRotation * Camera::ViewDirectionCameraSpace;
-    const glm::dvec3 right = glm::normalize(
-        glm::cross(forward, cameraRotation * Camera::UpDirectionCameraSpace)
-    );
-    const glm::dvec3 direction = forward * velocity.y + right * velocity.x;
+    const glm::dvec3 up = cameraRotation * Camera::UpDirectionCameraSpace;
+    const glm::dvec3 right = glm::normalize(glm::cross(forward, up));
+    const glm::dvec3 direction =
+        forward * velocity.y + right * velocity.x + up * velocity.z;
     return cameraPosition + direction * distance * deltaTime;
 }
 

@@ -309,7 +309,7 @@ private:
         const SurfacePositionHandle& positionHandle) const;
 
     /**
-     * Moves the camera along its own view and right directions, independent of the
+     * Moves the camera along its own view, right and up directions, independent of the
      * anchor node. The speed is proportional to the distance to the closest surface of
      * any scene graph node (including the anchor node), like the vertical translation.
      *

@@ -61,7 +61,7 @@ public:
     glm::dvec2 localRotationVelocity() const;
     glm::dvec2 globalRotationVelocity() const;
     double truckMovementVelocity() const;
-    glm::dvec2 freeFlightVelocity() const;
+    glm::dvec3 freeFlightVelocity() const;
 
     void updateStatesFromInput(double deltaTime);
 
