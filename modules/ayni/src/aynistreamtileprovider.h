@@ -31,6 +31,8 @@
 #include <modules/video/include/videoplayer.h>
 #include <openspace/opengl/uniformcache.h>
 #include <memory>
+#include <optional>
+#include <string>
 
 namespace openspace {
 
@@ -69,6 +71,8 @@ private:
     /// Colours the current video frame into `_colorTexture`
     void colorFrame();
 
+    /// The licence token that is sent to the stream host, if this installation has one
+    std::optional<std::string> _streamToken;
     ayni::Release _release;
     VideoPlayer _videoPlayer;
 

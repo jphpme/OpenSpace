@@ -24,6 +24,7 @@
 
 #include <modules/ayni/src/aynistreamtileprovider.h>
 
+#include <modules/ayni/src/aynilicence.h>
 #include <modules/globebrowsing/src/basictypes.h>
 #include <modules/globebrowsing/src/tileindex.h>
 #include <openspace/documentation/documentation.h>
@@ -64,34 +65,67 @@ namespace {
         std::string url;
     };
 
-    std::string download(const std::string& url) {
+    std::string authorizationHeader(const std::string& token) {
+        return std::format("Authorization: Bearer {}", token);
+    }
+
+    std::string download(const std::string& url,
+                         const std::optional<std::string>& token)
+    {
         // @TODO (2026-11-05, jphpme) This blocks while the asset loads; move the release
         // lookup off the main thread once streams refresh while running
         HttpMemoryDownload request = HttpMemoryDownload(url);
+        if (token.has_value() && ayni::isOnStreamHost(url)) {
+            request.addRequestHeader(authorizationHeader(*token));
+        }
         request.start();
         const bool success = request.wait();
         const std::vector<char>& data = request.downloadedData();
         if (!success) {
+            const std::string hint = token.has_value() || !ayni::isOnStreamHost(url) ?
+                "" :
+                ". Licensed streams need a licence key in ${USER}/ayni/licence.key";
             throw RuntimeError(
-                std::format("Could not read '{}'", url),
+                std::format("Could not read '{}'{}", url, hint),
                 std::string(_loggerCat)
             );
         }
         return std::string(data.begin(), data.end());
     }
 
-    ayni::Release loadRelease(const std::string& url) {
+    ayni::Release loadRelease(const std::string& url,
+                              const std::optional<std::string>& token)
+    {
         std::string releaseUrl = url;
         if (!url.ends_with("release.json")) {
-            releaseUrl = ayni::releaseUrlFromPointer(download(url), url);
+            releaseUrl = ayni::releaseUrlFromPointer(download(url, token), url);
         }
         LINFO(std::format("Reading release '{}'", releaseUrl));
-        ayni::Release release = ayni::parseRelease(download(releaseUrl), releaseUrl);
+        ayni::Release release =
+            ayni::parseRelease(download(releaseUrl, token), releaseUrl);
         if (!release.valueEncoding.has_value()) {
             throw RuntimeError(
                 std::format("Release '{}' is not value-encoded", release.releaseId),
                 std::string(_loggerCat)
             );
+        }
+
+        // libmpv sends the token with every request it makes for the playlist, so the
+        // playlist must not point anywhere but the stream host
+        if (token.has_value()) {
+            bool isOnStreamHost = ayni::isOnStreamHost(release.initializationUrl);
+            for (const ayni::Segment& segment : release.segments) {
+                isOnStreamHost = isOnStreamHost && ayni::isOnStreamHost(segment.url);
+            }
+            if (!isOnStreamHost) {
+                throw RuntimeError(
+                    std::format(
+                        "Release '{}' has media outside the stream host",
+                        release.releaseId
+                    ),
+                    std::string(_loggerCat)
+                );
+            }
         }
         return release;
     }
@@ -130,11 +164,20 @@ Documentation AyniStreamTileProvider::Documentation() {
 }
 
 AyniStreamTileProvider::AyniStreamTileProvider(const Dictionary& dictionary)
-    : _release(loadRelease(codegen::bake<Parameters>(dictionary).url))
+    : _streamToken(ayni::streamToken())
+    , _release(loadRelease(codegen::bake<Parameters>(dictionary).url, _streamToken))
     , _videoPlayer(videoPlayerDictionary(_release))
 {
     ZoneScoped;
 
+    // @TODO (2026-11-05, jphpme) The stream host accepts a token for 24 hours; renew it
+    // in libmpv for installations that run longer than that
+    if (_streamToken.has_value()) {
+        _videoPlayer.setMpvOption(
+            "http-header-fields",
+            authorizationHeader(*_streamToken)
+        );
+    }
     addPropertySubOwner(_videoPlayer);
 }
 

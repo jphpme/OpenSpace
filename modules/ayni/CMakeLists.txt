@@ -26,6 +26,7 @@ include(${PROJECT_SOURCE_DIR}/support/cmake/module_definition.cmake)
 
 set(HEADER_FILES
   aynimodule.h
+  src/aynilicence.h
   src/aynirelease.h
   src/aynistreamtileprovider.h
 )
@@ -33,6 +34,7 @@ source_group("Header Files" FILES ${HEADER_FILES})
 
 set(SOURCE_FILES
   aynimodule.cpp
+  src/aynilicence.cpp
   src/aynirelease.cpp
   src/aynistreamtileprovider.cpp
 )
