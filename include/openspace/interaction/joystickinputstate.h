@@ -95,13 +95,14 @@ struct JoystickInputState {
     void resetInputs();
 };
 
-/// The maximum number of joysticks that are supported by this system. This number is
-/// derived from the available GLFW constants
-constexpr int MaxJoysticks = 16;
+/// The maximum number of joysticks that are supported by this system. These are the 16
+/// joysticks that GLFW provides plus one virtual joystick for the OpenXR controllers
+constexpr int MaxJoysticks = 17;
 struct JoystickInputStates : public std::array<JoystickInputState, MaxJoysticks> {
-    /// The maximum number of joysticks that are supported by this system. This number is
-    /// derived from the available GLFW constants
-    static constexpr int MaxNumJoysticks = 16;
+    /// The maximum number of joysticks that are supported by this system. These are the
+    /// 16 joysticks that GLFW provides plus one virtual joystick for the OpenXR
+    /// controllers
+    static constexpr int MaxNumJoysticks = MaxJoysticks;
 
     /**
      * This function return the number of axes the joystick with the given name has.

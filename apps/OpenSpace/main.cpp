@@ -55,11 +55,13 @@
 #include <sgct/commandline.h>
 #include <sgct/engine.h>
 #include <sgct/log.h>
+#include <sgct/openxr.h>
 #include <sgct/projection/fisheye.h>
 #include <sgct/projection/nonlinearprojection.h>
 #include <sgct/user.h>
 #include <sgct/window.h>
 #include <stb_image.h>
+#include <array>
 #include <cstdint>
 #include <format>
 #include <iostream>
@@ -103,6 +105,14 @@ namespace {
 
 constexpr std::string_view _loggerCat = "main";
 constexpr std::string_view SpoutTag = "Spout";
+
+#ifdef SGCT_HAS_OPENXR
+// The OpenXR hand controllers are exposed as one virtual joystick in the slot after the
+// GLFW joysticks
+constexpr std::string_view OpenXRJoystickName = "OpenXR Controllers";
+constexpr int OpenXRJoystickIndex = GLFW_JOYSTICK_LAST + 1;
+static_assert(OpenXRJoystickIndex < MaxJoysticks, "No joystick slot for OpenXR");
+#endif // SGCT_HAS_OPENXR
 
 // @TODO (abock, 2020-04-09): These state variables should disappear
 const Window* currentWindow = nullptr;
@@ -321,6 +331,71 @@ void checkJoystickStatus() {
     }
 }
 
+#ifdef SGCT_HAS_OPENXR
+// Copies the OpenXR controller state into the virtual joystick. The layout and value
+// ranges follow the GLFW gamepads, so the regular joystick bindings work for it:
+//   Axes:    0, 1 left thumbstick (x, y), 2, 3 right thumbstick (x, y), 4, 5 left and
+//            right trigger, 6, 7 left and right grip
+//   Buttons: 0 A, 1 B, 2 X, 3 Y, 4 left thumbstick click, 5 right thumbstick click,
+//            6 menu, 7, 8 left and right grip pressed more than halfway
+// As for GLFW, pushing a thumbstick up gives -1 and a released trigger or grip is -1
+void updateOpenXRControllers() {
+    ZoneScoped;
+
+    JoystickInputState& joystick =
+        global::interactionHandler->joystickInputStates().at(OpenXRJoystickIndex);
+
+    if (!openxr::isHMDActive()) {
+        if (joystick.isConnected) {
+            joystick.resetInputs();
+        }
+        joystick.isConnected = false;
+        return;
+    }
+
+    if (!joystick.isConnected) {
+        joystick.isConnected = true;
+        joystick.name = std::string(OpenXRJoystickName);
+        joystick.nAxes = 8;
+        joystick.nButtons = 9;
+        joystick.initializeAxesAndButtons();
+        LDEBUGC(
+            "Game Controller",
+            std::format("Detected controller: '{}'", joystick.name)
+        );
+    }
+
+    const openxr::ControllerState& left = openxr::controllerState(openxr::Hand::Left);
+    const openxr::ControllerState& right = openxr::controllerState(openxr::Hand::Right);
+    const auto toTrigger = [](float value) { return 2.f * value - 1.f; };
+    joystick.axes = {
+        left.thumbstick.x,
+        -left.thumbstick.y,
+        right.thumbstick.x,
+        -right.thumbstick.y,
+        toTrigger(left.trigger),
+        toTrigger(right.trigger),
+        toTrigger(left.grip),
+        toTrigger(right.grip)
+    };
+
+    const std::array<bool, 9> buttons = {
+        right.primaryButton,
+        right.secondaryButton,
+        left.primaryButton,
+        left.secondaryButton,
+        left.thumbstickClick,
+        right.thumbstickClick,
+        left.menuButton,
+        left.grip > 0.5f,
+        right.grip > 0.5f
+    };
+    for (size_t i = 0; i < buttons.size(); i++) {
+        joystick.updateButtonState(buttons[i], static_cast<int>(i));
+    }
+}
+#endif // SGCT_HAS_OPENXR
+
 bool isGuiWindow(sgct::Window* window) {
     if (global::windowDelegate->hasGuiWindow()) {
         return window->hasTag("GUI");
@@ -475,6 +550,9 @@ void mainPreSyncFunc() {
 
     // Query joystick status, those connected at run time
     checkJoystickStatus();
+#ifdef SGCT_HAS_OPENXR
+    updateOpenXRControllers();
+#endif // SGCT_HAS_OPENXR
 
     LTRACE("main::mainPreSyncFunc(end)");
 }

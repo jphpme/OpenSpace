@@ -12,6 +12,11 @@ vcpkg_from_github(
   REF 0fbe383b60679e7739c0aba572c9c8df9a149e88
   SHA512 4bb8711c7e747c0b30c49a48f4a231db6dc641dda1c39022fa80e0c9d9c5b5e0858ad9e410ec4bb2e1bd9390f1b3cd8172290a0aba4d961922e5643b098b3a57
   HEAD_REF master
+  # OpenXR changes for headset use that are not in SGCT yet. Each patch is one commit,
+  # created with `git format-patch` against REF
+  PATCHES
+    0001-openxr-diagnostics.patch
+    0002-openxr-controllers.patch
 )
 
 vcpkg_check_features(
