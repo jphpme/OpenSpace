@@ -29,7 +29,6 @@ include(${PROJECT_SOURCE_DIR}/support/cmake/application_definition.cmake)
 # it from the main CMakeLists file
 
 create_new_application(OpenSpace
-  ${SGCT_OPENVR_FILES}
   ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/openspace.rc
   ${CMAKE_CURRENT_SOURCE_DIR}/openspace.icns
@@ -39,15 +38,12 @@ set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/openspace.icns PROPERTIE
 
 target_include_directories(
   OpenSpace PRIVATE
-  ${OPENVR_INCLUDE_DIRS}
-  ${SGCT_OPENVR_INCLUDE_DIRECTORY}
   ${SPOUT_INCLUDE_DIRS}
 )
 
-target_link_libraries(OpenSpace PRIVATE openspace-core openspace-module-collection ${OPENVR_LIBRARY} ${SPOUT_LIBRARY})
+target_link_libraries(OpenSpace PRIVATE openspace-core openspace-module-collection ${SPOUT_LIBRARY})
 
 target_compile_definitions(OpenSpace PRIVATE
-  ${SGCT_OPENVR_DEFINITIONS}
   ${SPOUT_DEFINITIONS}
 )
 
