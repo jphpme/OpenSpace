@@ -51,7 +51,6 @@
 #endif // WIN32
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
-#include <glm/gtc/constants.hpp>
 #include <sgct/clustermanager.h>
 #include <sgct/commandline.h>
 #include <sgct/engine.h>
@@ -62,13 +61,10 @@
 #include <sgct/user.h>
 #include <sgct/window.h>
 #include <stb_image.h>
-#include <algorithm>
 #include <array>
-#include <cmath>
 #include <cstdint>
 #include <format>
 #include <iostream>
-#include <optional>
 #include <string_view>
 
 #ifdef WIN32
@@ -336,54 +332,13 @@ void checkJoystickStatus() {
 }
 
 #ifdef SGCT_HAS_OPENXR
-// While the right trigger is held more than halfway, returns how fast the pointing ray
-// of the right controller turns left/right (x) and up/down (y), as a fraction of
-// `MaxDragSpeed` and clamped to [-1, 1]. Turning right and up are positive
-glm::vec2 rightControllerDrag(const openxr::ControllerState& right) {
-    // Turning the ray this fast, in radians per second, gives a full axis value
-    constexpr float MaxDragSpeed = 3.f;
-    // Yaw and pitch of the ray in the previous frame while dragging
-    static std::optional<glm::vec2> previousAngles;
-
-    if (!right.isActive || right.trigger < 0.5f) {
-        previousAngles = std::nullopt;
-        return glm::vec2(0.f);
-    }
-
-    const glm::vec3 direction =
-        glm::normalize(glm::mat3(right.aimPose) * glm::vec3(0.f, 0.f, -1.f));
-    const glm::vec2 angles = glm::vec2(
-        std::atan2(direction.x, -direction.z),
-        std::asin(std::clamp(direction.y, -1.f, 1.f))
-    );
-    glm::vec2 delta = angles - previousAngles.value_or(angles);
-    previousAngles = angles;
-
-    // Keep the yaw difference in [-pi, pi] when the ray points straight backwards
-    if (delta.x > glm::pi<float>()) {
-        delta.x -= glm::two_pi<float>();
-    }
-    else if (delta.x < -glm::pi<float>()) {
-        delta.x += glm::two_pi<float>();
-    }
-
-    const double dt = global::windowDelegate->deltaTime();
-    if (dt <= 0.0) {
-        return glm::vec2(0.f);
-    }
-    const glm::vec2 speed = delta / static_cast<float>(dt);
-    return glm::clamp(speed / MaxDragSpeed, glm::vec2(-1.f), glm::vec2(1.f));
-}
-
 // Copies the OpenXR controller state into the virtual joystick. The layout and value
 // ranges follow the GLFW gamepads, so the regular joystick bindings work for it:
 //   Axes:    0, 1 left thumbstick (x, y), 2, 3 right thumbstick (x, y), 4, 5 left and
-//            right trigger, 6, 7 left and right grip, 8, 9 right controller drag
-//            (see rightControllerDrag)
+//            right trigger, 6, 7 left and right grip
 //   Buttons: 0 A, 1 B, 2 X, 3 Y, 4 left thumbstick click, 5 right thumbstick click,
 //            6 menu, 7, 8 left and right grip pressed more than halfway
-// As for GLFW, pushing a thumbstick up or dragging up gives -1 and a released trigger or
-// grip is -1
+// As for GLFW, pushing a thumbstick up gives -1 and a released trigger or grip is -1
 void updateOpenXRControllers() {
     ZoneScoped;
 
@@ -401,7 +356,7 @@ void updateOpenXRControllers() {
     if (!joystick.isConnected) {
         joystick.isConnected = true;
         joystick.name = std::string(OpenXRJoystickName);
-        joystick.nAxes = 10;
+        joystick.nAxes = 8;
         joystick.nButtons = 9;
         joystick.initializeAxesAndButtons();
         LDEBUGC(
@@ -413,7 +368,6 @@ void updateOpenXRControllers() {
     const openxr::ControllerState& left = openxr::controllerState(openxr::Hand::Left);
     const openxr::ControllerState& right = openxr::controllerState(openxr::Hand::Right);
     const auto toTrigger = [](float value) { return 2.f * value - 1.f; };
-    const glm::vec2 drag = rightControllerDrag(right);
     joystick.axes = {
         left.thumbstick.x,
         -left.thumbstick.y,
@@ -422,9 +376,7 @@ void updateOpenXRControllers() {
         toTrigger(left.trigger),
         toTrigger(right.trigger),
         toTrigger(left.grip),
-        toTrigger(right.grip),
-        drag.x,
-        -drag.y
+        toTrigger(right.grip)
     };
 
     const std::array<bool, 9> buttons = {
