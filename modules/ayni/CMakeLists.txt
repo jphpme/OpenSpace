@@ -26,6 +26,7 @@ include(${PROJECT_SOURCE_DIR}/support/cmake/module_definition.cmake)
 
 set(HEADER_FILES
   aynimodule.h
+  src/aynicatalogue.h
   src/ayniconnection.h
   src/aynirelease.h
   src/aynistreamtileprovider.h
@@ -34,6 +35,8 @@ source_group("Header Files" FILES ${HEADER_FILES})
 
 set(SOURCE_FILES
   aynimodule.cpp
+  aynimodule_lua.inl
+  src/aynicatalogue.cpp
   src/ayniconnection.cpp
   src/aynirelease.cpp
   src/aynistreamtileprovider.cpp

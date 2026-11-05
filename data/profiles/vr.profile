@@ -3,6 +3,7 @@
     "base_blank",
     "base_keybindings",
     "events/toggle_sun",
+    "modules/ayni/streams",
     "scene/solarsystem/sun/sun",
     "scene/solarsystem/planets/planets",
     "scene/solarsystem/planets/default_layers",
