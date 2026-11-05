@@ -24,6 +24,7 @@
 
 #include <modules/ayni/aynimodule.h>
 
+#include <modules/ayni/src/ayniconnection.h>
 #include <modules/ayni/src/aynistreamtileprovider.h>
 #include <modules/globebrowsing/src/tileprovider/tileprovider.h>
 #include <openspace/documentation/documentation.h>
@@ -37,11 +38,24 @@ AyniModule::AyniModule()
     : OpenSpaceModule(AyniModule::Name)
 {}
 
+AyniModule::~AyniModule() = default;
+
 void AyniModule::internalInitialize(const Dictionary&) {
     TemplateFactory<TileProvider>* fTileProvider =
         FactoryManager::ref().factory<TileProvider>();
     assert_msg(fTileProvider, "TileProvider factory was not created");
     fTileProvider->registerClass<AyniStreamTileProvider>("AyniStreamTileProvider");
+}
+
+void AyniModule::internalDeinitialize() {
+    _streamAccess = nullptr;
+}
+
+ayni::StreamAccess& AyniModule::streamAccess() {
+    if (!_streamAccess) {
+        _streamAccess = std::make_unique<ayni::StreamAccess>();
+    }
+    return *_streamAccess;
 }
 
 std::vector<Documentation> AyniModule::documentations() const {

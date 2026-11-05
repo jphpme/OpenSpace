@@ -66,8 +66,8 @@ public:
     void initialize();
 
     /**
-     * Sets the libmpv option \p name to \p value whenever the player starts libmpv. An
-     * option set after #initialize takes effect when the video is reloaded.
+     * Sets the libmpv option \p name to \p value, now if libmpv is running and whenever
+     * the player starts it. A value replaces the one set before for the same option.
      */
     void setMpvOption(std::string name, std::string value);
 
