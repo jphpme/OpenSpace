@@ -112,6 +112,36 @@ local FreeFlightMode = {
   IsLocal = true
 }
 
+-- A short-lived message floating in front of the user: 1.5 m ahead and slightly below
+-- eye level, in the tracking space of the headset
+local Message = {
+  Type = "ScreenSpaceText",
+  Identifier = "VRMessage",
+  Name = "VR message",
+  Enabled = false,
+  Text = "",
+  FontSize = 48,
+  Placement = {
+    CartesianPosition = { 0.0, -0.2, -1.5 },
+    FaceCamera = true,
+    Scale = 0.3
+  },
+  Style = {
+    BackgroundColor = { 0.0, 0.0, 0.0, 0.5 }
+  }
+}
+
+-- Returns Lua code that shows the result of the Lua expression `text` as the message,
+-- which then fades out
+local function showMessageCommand(text)
+  local uri = "ScreenSpace." .. Message.Identifier
+  return string.format(
+    "openspace.setPropertyValueSingle(%q, %s)\n" ..
+    "openspace.fadeIn(%q, 0.2, 'openspace.fadeOut(\"%s\", 2.5)')\n",
+    uri .. ".Text", text, uri, uri
+  )
+end
+
 local ToggleNavigationMode = {
   Identifier = "os.vr.ToggleNavigationMode",
   Name = "Toggle locked and free flight VR navigation",
@@ -119,16 +149,19 @@ local ToggleNavigationMode = {
     local axis = openspace.navigation.joystickAxis(%q, %d)
     if axis.Type == "Orbit X" then
       openspace.action.triggerAction(%q)
-      openspace.printInfo("VR navigation: free flight")
+      %s
     else
       %s
       openspace.action.triggerAction(%q)
-      openspace.printInfo("VR navigation: locked on " ..
-        openspace.propertyValue("NavigationHandler.OrbitalNavigator.Anchor"))
+      %s
     end
   ]],
     Name, OpenXRControllers.LeftThumbStick.LeftRight, FreeFlightMode.Identifier,
-    FocusClosestCommand, LockedMode.Identifier
+    showMessageCommand('"Free flight"'),
+    FocusClosestCommand, LockedMode.Identifier,
+    showMessageCommand(
+      '"Locked on " .. openspace.propertyValue("NavigationHandler.OrbitalNavigator.Anchor")'
+    )
   ),
   Documentation = [[
     Switches between free flight and locked navigation. Locking focuses on the closest
@@ -209,6 +242,7 @@ end
 
 
 asset.onInitialize(function()
+  openspace.addScreenSpaceRenderable(Message)
   openspace.action.registerAction(LockedMode)
   openspace.action.registerAction(FreeFlightMode)
   openspace.action.registerAction(ToggleNavigationMode)
@@ -220,6 +254,7 @@ asset.onDeinitialize(function()
   openspace.action.removeAction(ToggleNavigationMode)
   openspace.action.removeAction(FreeFlightMode)
   openspace.action.removeAction(LockedMode)
+  openspace.removeScreenSpaceRenderable(Message)
 end)
 
 asset.export("LockedMode", LockedMode.Identifier)

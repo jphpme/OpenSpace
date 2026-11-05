@@ -1190,6 +1190,20 @@ void setSgctDelegateFunctions() {
         );
         glfwSetCursor(glfwGetCurrentContext(), Cursors[mouse]);
     };
+#ifdef SGCT_HAS_OPENXR
+    sgctDelegate.vrControllerAimPose = [](int hand) -> std::optional<glm::mat4> {
+        const openxr::ControllerState& state = openxr::controllerState(
+            hand == 0 ? openxr::Hand::Left : openxr::Hand::Right
+        );
+        if (!openxr::isHMDActive() || !state.isActive) {
+            return std::nullopt;
+        }
+        // The view matrix passed to rendering includes the translation to the user
+        // position (see mainRenderFunc), so that translation is undone here
+        const glm::vec3 userPosition = Engine::defaultUser().posMono();
+        return glm::translate(glm::mat4(1.f), -userPosition) * state.aimPose;
+    };
+#endif // SGCT_HAS_OPENXR
 }
 
 } // namespace

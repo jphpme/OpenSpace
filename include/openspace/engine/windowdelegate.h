@@ -26,6 +26,7 @@
 #define __OPENSPACE_CORE___WINDOWDELEGATE___H__
 
 #include <openspace/glm.h>
+#include <optional>
 #include <vector>
 
 namespace openspace {
@@ -134,6 +135,13 @@ struct WindowDelegate {
     void (*setStatisticsGraphOffset)(glm::vec2 offset) = [](glm::vec2) {};
 
     void (*setMouseCursor)(Cursor cursor) = [](Cursor) {};
+
+    /// The aim pose (pointing forward along -z) of the left (`hand` = 0) or right
+    /// (`hand` = 1) controller of a VR headset, or `std::nullopt` if it is not tracked.
+    /// The pose is in the same space as the view matrix that is passed to rendering, so
+    /// `projection * view * pose` places geometry at the controller
+    std::optional<glm::mat4> (*vrControllerAimPose)(int hand) =
+        [](int) -> std::optional<glm::mat4> { return std::nullopt; };
 };
 
 } // namespace openspace
