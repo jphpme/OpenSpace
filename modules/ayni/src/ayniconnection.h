@@ -111,6 +111,9 @@ public:
     /// Returns a number that changes whenever the token does
     int generation() const;
 
+    /// Returns when the current token expires
+    std::chrono::steady_clock::time_point expiresAt() const;
+
 private:
     void startRequest();
 
@@ -123,6 +126,7 @@ private:
     std::string _lastError;
     int _generation = 0;
     bool _isRefused = false;
+    std::chrono::steady_clock::time_point _expiresAt;
     std::chrono::steady_clock::time_point _nextRequest;
     std::unique_ptr<HttpMemoryDownload> _request;
 };

@@ -185,6 +185,7 @@ AyniStreamTileProvider::AyniStreamTileProvider(const Dictionary& dictionary)
         _videoPlayer.setMpvOption("http-header-fields", authorizationHeader(*token));
     }
     _tokenGeneration = access.generation();
+    _tokenExpiresAt = access.expiresAt();
     addPropertySubOwner(_videoPlayer);
 }
 
@@ -259,11 +260,19 @@ void AyniStreamTileProvider::update() {
     if (access.hasConnection()) {
         access.update();
         if (access.generation() != _tokenGeneration) {
+            // libmpv stops playing at the first segment that the stream host refused,
+            // so a token that came after the old one expired needs a reload
+            const bool hasLapsed = std::chrono::steady_clock::now() >= _tokenExpiresAt;
             _tokenGeneration = access.generation();
+            _tokenExpiresAt = access.expiresAt();
             _videoPlayer.setMpvOption(
                 "http-header-fields",
                 authorizationHeader(*access.token())
             );
+            if (hasLapsed) {
+                LINFO("Reloading the stream with a new token");
+                _videoPlayer.reload();
+            }
         }
     }
 

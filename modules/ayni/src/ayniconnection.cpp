@@ -241,6 +241,10 @@ int StreamAccess::generation() const {
     return _generation;
 }
 
+std::chrono::steady_clock::time_point StreamAccess::expiresAt() const {
+    return _expiresAt;
+}
+
 void StreamAccess::startRequest() {
     _request = std::make_unique<HttpMemoryDownload>(
         std::format("{}{}", _connection->server, TokenRoute),
@@ -266,6 +270,7 @@ void StreamAccess::finishRequest() {
             StreamToken token = parseStreamToken(body);
             _token = std::move(token.token);
             _generation++;
+            _expiresAt = now + token.lifetime;
             _nextRequest = now + std::max(token.lifetime - RenewBefore, MinimumWait);
             LDEBUG("Received a new AYNI stream token");
         }
