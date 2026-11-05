@@ -76,6 +76,12 @@ struct ValueEncoding {
     glm::ivec2 dataRegionOffset = glm::ivec2(0);
     glm::ivec2 dataRegionSize = glm::ivec2(0);
 
+    /// The edges of the map in degrees; the whole globe unless the release names a region
+    double latTop = 90.0;
+    double latBottom = -90.0;
+    double lonLeft = -180.0;
+    double lonRight = 180.0;
+
     std::vector<PaletteStop> palette;
     std::vector<ValueClass> classes;
 

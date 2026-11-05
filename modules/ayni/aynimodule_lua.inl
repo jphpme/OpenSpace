@@ -124,10 +124,10 @@ namespace {
 
 /**
  * Returns the AYNI streams that OpenSpace can play: the value-encoded streams of the
- * stream host's catalogue that cover a whole globe. Each is a table with the keys
+ * stream host's catalogue, of whole globes and of regions. Each is a table with the keys
  * `Identifier`, `Name`, `Description`, `Category`, `Globe` (the scene graph node of the
- * globe it covers) and `Url`. The catalogue is read from the stream host on the first
- * call.
+ * globe it covers), `Region` (the region it covers, or an empty string for the whole
+ * globe) and `Url`. The catalogue is read from the stream host on the first call.
  */
 [[codegen::luawrap]] std::vector<Dictionary> streams() {
     std::vector<Dictionary> result;
@@ -138,6 +138,7 @@ namespace {
         entry.setValue("Description", stream.description);
         entry.setValue("Category", stream.category);
         entry.setValue("Globe", stream.globe);
+        entry.setValue("Region", stream.region);
         entry.setValue("Url", stream.url);
         result.push_back(std::move(entry));
     }

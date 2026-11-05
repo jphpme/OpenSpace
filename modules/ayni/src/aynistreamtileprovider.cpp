@@ -229,9 +229,11 @@ void AyniStreamTileProvider::internalInitialize() {
             .format = opengl::Texture::Format::RGBA,
             .dataType = GL_UNSIGNED_BYTE
         },
+        // A regional map covers part of the globe; around it the layer is transparent
         opengl::Texture::SamplerInit {
             .filter = opengl::Texture::FilterMode::Linear,
-            .wrapping = opengl::Texture::WrappingMode::ClampToEdge
+            .wrapping = opengl::Texture::WrappingMode::ClampToBorder,
+            .borderColor = glm::vec4(0.f)
         }
     );
 
@@ -361,17 +363,29 @@ ChunkTile AyniStreamTileProvider::chunkTile(TileIndex tileIndex, int parents,
         ti.level--;
     };
 
-    // The whole equirectangular frame is one texture; each chunk shows its part of it
-    const glm::vec2 nTiles = glm::vec2(
-        std::pow(2.f, static_cast<float>(tileIndex.level)),
-        std::pow(2.f, static_cast<float>(tileIndex.level - 1))
-    );
-    const glm::vec2 ratios = glm::vec2(1.f / nTiles.x, 1.f / nTiles.y);
-    const float offsetX = ratios.x * static_cast<float>(tileIndex.x);
+    // The equirectangular map is one texture; each chunk shows its part of it. The
+    // texture's first row is the south edge of the map
+    const ayni::ValueEncoding& enc = *_release.valueEncoding;
+    const double nTilesX = std::pow(2.0, tileIndex.level);
+    const double nTilesY = std::pow(2.0, tileIndex.level - 1);
+    const double tileWidth = 360.0 / nTilesX;
+    const double tileHeight = 180.0 / nTilesY;
+    const double west = -180.0 + tileWidth * static_cast<double>(tileIndex.x);
     // The tiles on the y-axis are counted from the north
-    const float offsetY = ratios.y * (nTiles.y - static_cast<float>(tileIndex.y) - 1.f);
+    const double south = 90.0 - tileHeight * static_cast<double>(tileIndex.y + 1);
+    const double mapWidth = enc.lonRight - enc.lonLeft;
+    const double mapHeight = enc.latTop - enc.latBottom;
 
-    TileUvTransform uvTransform = { glm::vec2(offsetX, offsetY), ratios };
+    TileUvTransform uvTransform = {
+        glm::vec2(
+            static_cast<float>((west - enc.lonLeft) / mapWidth),
+            static_cast<float>((south - enc.latBottom) / mapHeight)
+        ),
+        glm::vec2(
+            static_cast<float>(tileWidth / mapWidth),
+            static_cast<float>(tileHeight / mapHeight)
+        )
+    };
     return traverseTree(tileIndex, parents, maxParents, ascendToParent, uvTransform);
 }
 

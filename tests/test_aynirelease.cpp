@@ -134,6 +134,58 @@ TEST_CASE("AyniRelease: Parse release", "[aynirelease]") {
     CHECK(enc.alphaMode == ValueEncoding::AlphaMode::Gradient);
     REQUIRE(enc.transparentBelowValue.has_value());
     CHECK(*enc.transparentBelowValue == Catch::Approx(10.0));
+
+    // Without a `geo` block, the map covers the whole globe
+    CHECK(enc.latTop == Catch::Approx(90.0));
+    CHECK(enc.latBottom == Catch::Approx(-90.0));
+    CHECK(enc.lonLeft == Catch::Approx(-180.0));
+    CHECK(enc.lonRight == Catch::Approx(180.0));
+}
+
+TEST_CASE("AyniRelease: Regional release", "[aynirelease]") {
+    constexpr std::string_view DataRegion =
+        R"("dataRegion": { "x": 0, "y": 0, "width": 2048, "height": 1024 },)";
+    const auto withGeo = [&DataRegion](std::string_view geo) {
+        std::string json = std::string(ReleaseJson);
+        const size_t at = json.find(DataRegion);
+        json.insert(at + DataRegion.size(), std::format(R"( "geo": {{ {} }},)", geo));
+        return json;
+    };
+
+    // AEMET's forecast for Spain
+    const Release release = parseRelease(
+        withGeo(R"("latTop": 44.4875, "latBottom": 25.4875, "lonLeft": -20.0125, )"
+                R"("lonRight": 4.9875, "pixelCenter": true)"),
+        ReleaseUrl
+    );
+    REQUIRE(release.valueEncoding.has_value());
+    CHECK(release.valueEncoding->latTop == Catch::Approx(44.4875));
+    CHECK(release.valueEncoding->latBottom == Catch::Approx(25.4875));
+    CHECK(release.valueEncoding->lonLeft == Catch::Approx(-20.0125));
+    CHECK(release.valueEncoding->lonRight == Catch::Approx(4.9875));
+
+    // Edges in the wrong order, off the globe, or across the antimeridian
+    CHECK_THROWS_AS(
+        parseRelease(
+            withGeo(R"("latTop": 10, "latBottom": 20, "lonLeft": 0, "lonRight": 5)"),
+            ReleaseUrl
+        ),
+        RuntimeError
+    );
+    CHECK_THROWS_AS(
+        parseRelease(
+            withGeo(R"("latTop": 95, "latBottom": 20, "lonLeft": 0, "lonRight": 5)"),
+            ReleaseUrl
+        ),
+        RuntimeError
+    );
+    CHECK_THROWS_AS(
+        parseRelease(
+            withGeo(R"("latTop": 60, "latBottom": 50, "lonLeft": 170, "lonRight": -170)"),
+            ReleaseUrl
+        ),
+        RuntimeError
+    );
 }
 
 TEST_CASE("AyniRelease: Reject invalid releases", "[aynirelease]") {

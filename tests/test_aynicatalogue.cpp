@@ -52,6 +52,7 @@ namespace {
         {
           "name": "aemet_precip_obs", "display_name": "Regional",
           "type": "stream", "valueEncoded": true, "coverage": "regional",
+          "region": "spain", "regionName": "Spain",
           "releaseDescriptorUrl": "regional/spain/x/latest.json"
         },
         {
@@ -80,13 +81,14 @@ namespace {
 
 TEST_CASE("AyniCatalogue: Playable streams", "[aynicatalogue]") {
     const std::vector<CatalogueStream> streams = parseCatalogue(Catalogue);
-    REQUIRE(streams.size() == 2);
+    REQUIRE(streams.size() == 3);
 
     CHECK(streams[0].identifier == "clouds");
     CHECK(streams[0].name == "Global Cloud Cover");
     CHECK(streams[0].description == "Clouds.");
     CHECK(streams[0].category == "Atmosphere");
     CHECK(streams[0].globe == "Earth");
+    CHECK(streams[0].region.empty());
     CHECK(
         streams[0].url ==
         "https://pachamama-studios.stream/global/realtime/noaa-sos/clouds/latest.json"
@@ -96,6 +98,11 @@ TEST_CASE("AyniCatalogue: Playable streams", "[aynicatalogue]") {
     CHECK(streams[1].identifier == "mars_albedo_tes");
     CHECK(streams[1].globe == "Mars");
     CHECK(streams[1].category == "Other");
+
+    // A region of Earth
+    CHECK(streams[2].identifier == "aemet_precip_obs");
+    CHECK(streams[2].globe == "Earth");
+    CHECK(streams[2].region == "Spain");
 }
 
 TEST_CASE("AyniCatalogue: Not a catalogue", "[aynicatalogue]") {

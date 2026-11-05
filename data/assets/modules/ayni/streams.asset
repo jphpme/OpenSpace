@@ -1,4 +1,5 @@
--- One action per AYNI stream, in the Actions panel under /AYNI/<globe>/<category>.
+-- One action per AYNI stream, in the Actions panel under /AYNI/<globe>/<category>, or
+-- /AYNI/<globe>/Regions/<region> for a stream of a region.
 -- Showing a stream removes the one shown before. The streams come from the stream host's
 -- catalogue, which is read when this asset loads
 local HideStreams = {
@@ -50,7 +51,9 @@ asset.onInitialize(function()
       Name = stream.Name,
       Command = string.format("openspace.ayni.showStream(%q)", stream.Identifier),
       Documentation = stream.Description,
-      GuiPath = "/AYNI/" .. stream.Globe .. "/" .. stream.Category,
+      GuiPath = stream.Region == "" and
+        ("/AYNI/" .. stream.Globe .. "/" .. stream.Category) or
+        ("/AYNI/" .. stream.Globe .. "/Regions/" .. stream.Region),
       IsLocal = false
     }
     openspace.action.registerAction(action)
@@ -77,11 +80,11 @@ asset.export("PreviousStream", PreviousStream.Identifier)
 asset.meta = {
   Name = "AYNI streams",
   Description = [[
-    Actions that show the value-encoded AYNI streams on the globes they cover, one at a
-    time: one action per stream in the stream host's catalogue, grouped by globe and
-    category, and actions for the next and previous stream of the playlist. Licensed
-    streams need the OpenSpace connection file of an AYNI XR plan in
-    ${USER}/ayni/connection.json]],
+    Actions that show the value-encoded AYNI streams on the globes and regions they
+    cover, one at a time: one action per stream in the stream host's catalogue, grouped
+    by globe and category or region, and actions for the next and previous stream of
+    the playlist. Licensed streams need the OpenSpace connection file of an AYNI XR plan
+    in ${USER}/ayni/connection.json]],
   Author = "OpenSpace in VR",
   URL = "https://github.com/jphpme/OpenSpace",
   License = "MIT license"
