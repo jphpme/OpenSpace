@@ -42,6 +42,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace openspace {
 
@@ -61,6 +64,12 @@ public:
     ~VideoPlayer() override;
 
     void initialize();
+
+    /**
+     * Sets the libmpv option \p name to \p value whenever the player starts libmpv. An
+     * option set after #initialize takes effect when the video is reloaded.
+     */
+    void setMpvOption(std::string name, std::string value);
 
     // Video interaction
     void preparePlay();
@@ -201,6 +210,9 @@ private:
     double _startJ200Time = 0.0;
     double _endJ200Time = 0.0;
     double _frameDuration = 0.0;
+
+    /// Options set by the owner of the player, applied before libmpv is initialized
+    std::vector<std::pair<std::string, std::string>> _mpvOptions;
 
     // Libmpv
     mpv_handle* _mpvHandle = nullptr;

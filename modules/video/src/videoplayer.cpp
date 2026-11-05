@@ -422,6 +422,10 @@ void VideoPlayer::initialize() {
     toggleMute();
 }
 
+void VideoPlayer::setMpvOption(std::string name, std::string value) {
+    _mpvOptions.emplace_back(std::move(name), std::move(value));
+}
+
 void VideoPlayer::initializeMpv() {
     _mpvHandle = mpv_create();
     if (!_mpvHandle) {
@@ -475,6 +479,10 @@ void VideoPlayer::initializeMpv() {
     // color
     if (mpv_set_property_string(_mpvHandle, "background", "none") < 0) {
         setPropertyStringMpv("alpha", "yes");
+    }
+
+    for (const auto& [name, value] : _mpvOptions) {
+        setPropertyStringMpv(name.c_str(), value.c_str());
     }
 
     // Verbose mode for debug purposes
