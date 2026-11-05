@@ -101,7 +101,8 @@ local FocusClosestCommand = [[
 local LockedMode = {
   Identifier = "os.vr.LockedNavigation",
   Name = "Locked VR navigation",
-  Command = bindAxesCommand(LockedAxes),
+  Command = bindAxesCommand(LockedAxes) ..
+    'openspace.setPropertyValueSingle("Modules.VR.FreeFlight", false)\n',
   Documentation = [[
     Bind the OpenXR controller thumbsticks to orbit around and zoom towards the focus]],
   GuiPath = "/Navigation/VR",
@@ -111,7 +112,8 @@ local LockedMode = {
 local FreeFlightMode = {
   Identifier = "os.vr.FreeFlightNavigation",
   Name = "Free flight VR navigation",
-  Command = bindAxesCommand(FreeFlightAxes),
+  Command = bindAxesCommand(FreeFlightAxes) ..
+    'openspace.setPropertyValueSingle("Modules.VR.FreeFlight", true)\n',
   Documentation = [[
     Bind the OpenXR controller thumbsticks to look around and to fly forward, back and
     sideways independently of the focus]],
@@ -153,8 +155,7 @@ local ToggleNavigationMode = {
   Identifier = "os.vr.ToggleNavigationMode",
   Name = "Toggle locked and free flight VR navigation",
   Command = string.format([[
-    local axis = openspace.navigation.joystickAxis(%q, %d)
-    if axis.Type == "Orbit X" then
+    if not openspace.propertyValue("Modules.VR.FreeFlight") then
       openspace.action.triggerAction(%q)
       %s
     else
@@ -163,7 +164,7 @@ local ToggleNavigationMode = {
       %s
     end
   ]],
-    Name, OpenXRControllers.LeftThumbStick.LeftRight, FreeFlightMode.Identifier,
+    FreeFlightMode.Identifier,
     showMessageCommand('"Free flight"'),
     FocusClosestCommand, LockedMode.Identifier,
     showMessageCommand(

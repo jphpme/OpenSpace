@@ -1203,6 +1203,12 @@ void setSgctDelegateFunctions() {
         const glm::vec3 userPosition = Engine::defaultUser().posMono();
         return glm::translate(glm::mat4(1.f), -userPosition) * state.aimPose;
     };
+    sgctDelegate.vrControllerTrigger = [](int hand) {
+        const openxr::ControllerState& state = openxr::controllerState(
+            hand == 0 ? openxr::Hand::Left : openxr::Hand::Right
+        );
+        return openxr::isHMDActive() && state.isActive ? state.trigger : 0.f;
+    };
 #endif // SGCT_HAS_OPENXR
 }
 

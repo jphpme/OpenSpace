@@ -142,6 +142,10 @@ struct WindowDelegate {
     /// `projection * view * pose` places geometry at the controller
     std::optional<glm::mat4> (*vrControllerAimPose)(int hand) =
         [](int) -> std::optional<glm::mat4> { return std::nullopt; };
+
+    /// How far the trigger of the left (`hand` = 0) or right (`hand` = 1) controller of
+    /// a VR headset is pressed, in [0, 1], or 0 if the controller is not tracked
+    float (*vrControllerTrigger)(int hand) = [](int) { return 0.f; };
 };
 
 } // namespace openspace
