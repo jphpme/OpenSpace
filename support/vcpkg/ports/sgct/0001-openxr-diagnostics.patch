@@ -1,0 +1,176 @@
+From 977a59bb66bc180c6dd218f4c6cc0e848c644111 Mon Sep 17 00:00:00 2001
+From: jphpme <jphpme@proton.me>
+Date: Thu, 5 Nov 2026 07:21:09 +0100
+Subject: [PATCH 1/2] Log OpenXR session state and frame statistics, skip
+ frames while not running
+
+Log every session state change and, every 5 seconds, how many frames were waited on,
+not rendered, had invalid views or were submitted, plus the average xrWaitFrame time
+and the current left eye orientation.
+
+updatePoses called xrWaitFrame even when the session was not running, which logs
+XR_ERROR_SESSION_NOT_RUNNING every frame until the runtime signals READY again.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ src/openxr.cpp | 80 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 80 insertions(+)
+
+diff --git a/src/openxr.cpp b/src/openxr.cpp
+index 8020ff3a..7d7c2cbc 100644
+--- a/src/openxr.cpp
++++ b/src/openxr.cpp
+@@ -38,6 +38,7 @@
+ 
+ #include <algorithm>
+ #include <array>
++#include <chrono>
+ #include <cmath>
+ #include <cstdint>
+ #include <cstring>
+@@ -89,6 +90,20 @@ namespace {
+     bool areViewsValid = false;
+     GraphicsBackend graphicsBackend = GraphicsBackend::OpenGL;
+ 
++    // Diagnostic counters, reported and reset every `FrameStatisticsInterval`
++    struct FrameStatistics {
++        std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
++        int waitedFrames = 0;
++        int notRenderedFrames = 0;
++        int invalidViewFrames = 0;
++        int submittedFrames = 0;
++        int failedCopies = 0;
++        double waitSeconds = 0.0;
++        uint64_t lastViewStateFlags = 0;
++    };
++    FrameStatistics frameStats;
++    constexpr std::chrono::seconds FrameStatisticsInterval = std::chrono::seconds(5);
++
+     std::array<XrViewConfigurationView, EyeCount> configurationViews;
+     std::array<XrView, EyeCount> views;
+     std::array<XrCompositionLayerProjectionView, EyeCount> projectionViews;
+@@ -966,12 +981,52 @@ namespace {
+         return succeeded(res, "Create local space");
+     }
+ 
++    void reportFrameStatistics() {
++        const std::chrono::steady_clock::time_point now =
++            std::chrono::steady_clock::now();
++        if (now - frameStats.start < FrameStatisticsInterval) {
++            return;
++        }
++
++        const XrQuaternionf& q = views[0].pose.orientation;
++        Log::Info(std::format(
++            "OpenXR frames: waited {}, not rendered {}, invalid views {}, submitted {}, "
++            "failed copies {}, avg wait {:.1f} ms, view flags {:#x}, "
++            "left eye orientation ({:.2f}, {:.2f}, {:.2f}, {:.2f})",
++            frameStats.waitedFrames, frameStats.notRenderedFrames,
++            frameStats.invalidViewFrames, frameStats.submittedFrames,
++            frameStats.failedCopies,
++            frameStats.waitedFrames > 0 ?
++                1000.0 * frameStats.waitSeconds / frameStats.waitedFrames :
++                0.0,
++            frameStats.lastViewStateFlags, q.x, q.y, q.z, q.w
++        ));
++        frameStats = FrameStatistics();
++    }
++
++    std::string_view sessionStateName(XrSessionState state) {
++        switch (state) {
++            case XR_SESSION_STATE_IDLE: return "IDLE";
++            case XR_SESSION_STATE_READY: return "READY";
++            case XR_SESSION_STATE_SYNCHRONIZED: return "SYNCHRONIZED";
++            case XR_SESSION_STATE_VISIBLE: return "VISIBLE";
++            case XR_SESSION_STATE_FOCUSED: return "FOCUSED";
++            case XR_SESSION_STATE_STOPPING: return "STOPPING";
++            case XR_SESSION_STATE_LOSS_PENDING: return "LOSS_PENDING";
++            case XR_SESSION_STATE_EXITING: return "EXITING";
++            default: return "UNKNOWN";
++        }
++    }
++
+     bool waitForRunningSession() {
+         XrEventDataBuffer event = {
+             .type = XR_TYPE_EVENT_DATA_BUFFER
+         };
+         while (xrPollEvent(instance, &event) == XR_SUCCESS) {
+             if (event.type != XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED) {
++                Log::Info(std::format(
++                    "OpenXR event type {}", static_cast<int>(event.type)
++                ));
+                 event = {
+                     .type = XR_TYPE_EVENT_DATA_BUFFER
+                 };
+@@ -980,6 +1035,9 @@ namespace {
+ 
+             const XrEventDataSessionStateChanged& state =
+                 *reinterpret_cast<XrEventDataSessionStateChanged*>(&event);
++            Log::Info(std::format(
++                "OpenXR session state: {}", sessionStateName(state.state)
++            ));
+             if (state.state == XR_SESSION_STATE_READY) {
+                 const XrSessionBeginInfo beginInfo = {
+                     .type = XR_TYPE_SESSION_BEGIN_INFO,
+@@ -1475,13 +1533,16 @@ void copyWindowToHMD(Window* win) {
+     }
+ 
+     if (!copyEye(*win, 0)) {
++        frameStats.failedCopies++;
+         endFrame(nullptr, 0);
+         return;
+     }
+     if (!copyEye(*win, 1)) {
++        frameStats.failedCopies++;
+         endFrame(nullptr, 0);
+         return;
+     }
++    frameStats.submittedFrames++;
+ 
+     for (uint32_t i = 0; i < EyeCount; ++i) {
+         projectionViews[i] = {
+@@ -1519,18 +1580,33 @@ void updatePoses() {
+     if (!isHMDActive() || !waitForRunningSession()) {
+         return;
+     }
++    reportFrameStatistics();
++    if (!isSessionRunning) {
++        // Frame functions return XR_ERROR_SESSION_NOT_RUNNING until the runtime signals
++        // XR_SESSION_STATE_READY again
++        return;
++    }
+     if (isFrameBegun) {
+         endFrame(nullptr, 0);
+     }
+ 
+     XrFrameWaitInfo waitInfo = { .type = XR_TYPE_FRAME_WAIT_INFO };
+     XrFrameState frameState = { .type = XR_TYPE_FRAME_STATE };
++    const std::chrono::steady_clock::time_point waitStart =
++        std::chrono::steady_clock::now();
+     XrResult res = xrWaitFrame(session, &waitInfo, &frameState);
++    frameStats.waitSeconds += std::chrono::duration<double>(
++        std::chrono::steady_clock::now() - waitStart
++    ).count();
++    frameStats.waitedFrames++;
+     if (!succeeded(res, "Wait frame")) {
+         resetFrameState();
+         return;
+     }
+     predictedDisplayTime = frameState.predictedDisplayTime;
++    if (!frameState.shouldRender) {
++        frameStats.notRenderedFrames++;
++    }
+ 
+     XrFrameBeginInfo beginInfo = {
+         .type = XR_TYPE_FRAME_BEGIN_INFO
+@@ -1578,6 +1654,10 @@ void updatePoses() {
+     areViewsValid = viewCount == EyeCount &&
+         (viewState.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) != 0 &&
+         (viewState.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT) != 0;
++    frameStats.lastViewStateFlags = viewState.viewStateFlags;
++    if (!areViewsValid) {
++        frameStats.invalidViewFrames++;
++    }
+     if (areViewsValid) {
+         eyeToHeadMatrices[0] = glm::inverse(transformMatrix(views[0].pose));
+         eyeToHeadMatrices[1] = glm::inverse(transformMatrix(views[1].pose));

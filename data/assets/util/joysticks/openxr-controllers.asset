@@ -1,0 +1,134 @@
+-- Navigation with the hand controllers of an OpenXR headset. The OpenSpace application
+-- exposes both controllers as one virtual joystick, laid out like a gamepad
+local OpenXRControllers = {
+  LeftThumbStick = {
+    LeftRight = 0,
+    UpDown = 1
+  },
+  RightThumbStick = {
+    LeftRight = 2,
+    UpDown = 3
+  },
+  LeftTrigger = 4,
+  RightTrigger = 5,
+  LeftGrip = 6,
+  RightGrip = 7,
+  A = 0,
+  B = 1,
+  X = 2,
+  Y = 3,
+  LeftStickButton = 4,
+  RightStickButton = 5,
+  Menu = 6,
+  LeftGripButton = 7,
+  RightGripButton = 8
+}
+
+local Name = "OpenXR Controllers"
+
+-- Joystick sensitivity while a grip is held, and when it is released. The normal value
+-- matches the one set in the vr profile
+local PrecisionSensitivity = 1.0
+local NormalSensitivity = 5.0
+
+local function bindInputs()
+  local controller = OpenXRControllers
+  local deadzone = 0.15
+
+  openspace.navigation.setAxisDeadZone(Name, controller.LeftThumbStick.LeftRight, deadzone)
+  openspace.navigation.setAxisDeadZone(Name, controller.LeftThumbStick.UpDown, deadzone)
+  openspace.navigation.setAxisDeadZone(Name, controller.RightThumbStick.LeftRight, deadzone)
+  openspace.navigation.setAxisDeadZone(Name, controller.RightThumbStick.UpDown, deadzone)
+
+  -- Left thumbstick orbits around the focus, the right one zooms (up and down) and
+  -- turns the view in place (left and right)
+  openspace.navigation.bindJoystickAxis(Name, controller.LeftThumbStick.LeftRight, "Orbit X")
+  openspace.navigation.bindJoystickAxis(
+    Name,
+    controller.LeftThumbStick.UpDown,
+    "Orbit Y",
+    true
+  )
+  openspace.navigation.bindJoystickAxis(Name, controller.RightThumbStick.UpDown, "Zoom", true)
+  openspace.navigation.bindJoystickAxis(
+    Name,
+    controller.RightThumbStick.LeftRight,
+    "Pan X",
+    true
+  )
+
+  -- Holding a grip makes all movement slower for fine adjustments
+  local sensitivityUri = "NavigationHandler.OrbitalNavigator.Input.JoystickSensitivity"
+  for _, grip in ipairs({ controller.LeftGripButton, controller.RightGripButton }) do
+    openspace.navigation.bindJoystickButton(
+      Name,
+      grip,
+      "openspace.setPropertyValueSingle('" .. sensitivityUri .. "', " ..
+        PrecisionSensitivity .. ")",
+      "Slow down movement while the grip is held",
+      "Press"
+    )
+    openspace.navigation.bindJoystickButton(
+      Name,
+      grip,
+      "openspace.setPropertyValueSingle('" .. sensitivityUri .. "', " ..
+        NormalSensitivity .. ")",
+      "Restore the movement speed when the grip is released",
+      "Release"
+    )
+  end
+
+  openspace.navigation.bindJoystickButton(
+    Name,
+    controller.A,
+    "openspace.navigation.retargetAnchor()",
+    "Look at the current focus"
+  )
+  openspace.navigation.bindJoystickButton(
+    Name,
+    controller.B,
+    "openspace.time.interpolateTogglePause()",
+    "Pause or resume the time simulation"
+  )
+  openspace.navigation.bindJoystickButton(
+    Name,
+    controller.X,
+    "openspace.time.interpolatePreviousDeltaTimeStep()",
+    "Go backwards in time, faster the more times this button is pressed"
+  )
+  openspace.navigation.bindJoystickButton(
+    Name,
+    controller.Y,
+    "openspace.time.interpolateNextDeltaTimeStep()",
+    "Go forwards in time, faster the more times this button is pressed"
+  )
+  openspace.navigation.bindJoystickButton(
+    Name,
+    controller.LeftStickButton,
+    "openspace.time.interpolateDeltaTime(1)",
+    "Reset to realtime"
+  )
+end
+
+
+asset.onInitialize(function()
+  bindInputs()
+end)
+
+asset.onDeinitialize(function()
+  openspace.navigation.unbindJoystick(Name)
+end)
+
+
+
+asset.meta = {
+  Name = "Joystick controller: OpenXR controllers",
+  Description = [[
+    Navigation with the hand controllers of an OpenXR headset: the left thumbstick
+    orbits, the right thumbstick zooms and turns, holding a grip slows down movement,
+    A looks at the focus, B pauses time, X and Y step time backwards and forwards
+  ]],
+  Author = "OpenSpace in VR",
+  URL = "https://github.com/jphpme/OpenSpace",
+  License = "MIT license"
+}
