@@ -214,6 +214,74 @@ TEST_CASE("AyniRelease: Reject invalid releases", "[aynirelease]") {
     );
 }
 
+TEST_CASE("AyniRelease: Segment lengths from the MPD", "[aynirelease]") {
+    // The releases of still pictures list bare segment addresses and an MPD
+    std::string json = std::string(ReleaseJson);
+    for (const std::string_view length : { "1.5", "0.5" }) {
+        const std::string media =
+            std::format(R"("durationSeconds": {}, "media": {{ "url")", length);
+        json.replace(json.find(media), media.size(), R"("url")");
+    }
+    // and the brace that closed the `media` block
+    for (int i = 0; i < 2; i++) {
+        json.replace(json.find(".mp4\" } }"), 9, ".mp4\" }");
+    }
+
+    // Without an MPD the lengths are missing
+    CHECK_THROWS_AS(parseRelease(json, ReleaseUrl), RuntimeError);
+
+    json.insert(json.find("\"segments\""), R"("mpd": { "url": "stream.mpd" }, )");
+    Release release = parseRelease(json, ReleaseUrl);
+    CHECK(release.mpdUrl == "https://host.example/global/x/clouds/releases/r1/stream.mpd");
+    REQUIRE(release.segments.size() == 2);
+    CHECK(
+        release.segments[1].url ==
+        "https://host.example/global/x/clouds/segments/c.mp4"
+    );
+    CHECK(release.segments[0].durationSeconds == 0.0);
+
+    // The timeline as the stream host writes it, with a repeat
+    constexpr std::string_view Mpd = R"(<?xml version='1.0' encoding='utf-8'?>
+      <MPD type="static" mediaPresentationDuration="PT4.0S">
+        <Period id="0">
+          <AdaptationSet id="0" contentType="video" frameRate="12/1">
+            <Representation id="video-0" width="720" height="376">
+              <SegmentList timescale="12000">
+                <Initialization sourceURL="../../init/a.mp4" />
+                <SegmentTimeline>
+                  <S d="24000" t="0" r="1" />
+                </SegmentTimeline>
+                <SegmentURL media="../../segments/b.mp4" />
+                <SegmentURL media="../../segments/c.mp4" />
+              </SegmentList>
+            </Representation>
+          </AdaptationSet>
+        </Period>
+      </MPD>)";
+    setSegmentDurations(release, Mpd);
+    CHECK(release.segments[0].durationSeconds == Catch::Approx(2.0));
+    CHECK(release.segments[1].durationSeconds == Catch::Approx(2.0));
+
+    // One segment of 1 s, the shape of a single still picture
+    constexpr std::string_view StillMpd = R"(<SegmentList timescale="1000">
+        <SegmentTimeline><S t="0" d="1000"/></SegmentTimeline></SegmentList>)";
+    Release still = release;
+    still.segments.resize(1);
+    setSegmentDurations(still, StillMpd);
+    CHECK(still.segments[0].durationSeconds == Catch::Approx(1.0));
+
+    // A timeline that does not match the release, or is not one
+    CHECK_THROWS_AS(setSegmentDurations(release, StillMpd), RuntimeError);
+    CHECK_THROWS_AS(setSegmentDurations(release, "<MPD></MPD>"), RuntimeError);
+    CHECK_THROWS_AS(
+        setSegmentDurations(
+            still,
+            "<SegmentTimeline><S d=\"-5\"/></SegmentTimeline>"
+        ),
+        RuntimeError
+    );
+}
+
 TEST_CASE("AyniRelease: OpenSpace date time", "[aynirelease]") {
     CHECK(openspaceDateTime("2026-08-25T07:00:00Z") == "2026 08 25 07:00:00");
     CHECK(openspaceDateTime("2026-11-05T10:00:00.250Z") == "2026 11 05 10:00:00");
