@@ -33,6 +33,8 @@ target_sources(
     testhelper.h
 
     test_assetloader.cpp
+    test_aynilicence.cpp
+    test_aynirelease.cpp
     test_commandlineparser.cpp
     test_concurrentqueue.cpp
     test_crc32.cpp

@@ -165,6 +165,8 @@ vec4 sample#{layerGroup}#{i}(vec2 uv, vec3 levelWeights,
   return texVal(#{layerGroup}[#{i}].pile, levelWeights, uv);
 #elif (#{#{layerGroup}#{i}LayerType} == 11) // VideoTileProvider
   return texVal(#{layerGroup}[#{i}].pile, levelWeights, uv);
+#elif (#{#{layerGroup}#{i}LayerType} == 12) // AyniStreamTileProvider
+  return texVal(#{layerGroup}[#{i}].pile, levelWeights, uv);
 #endif
 
   return vec4(0.0, 0.0, 0.0, 1.0);
