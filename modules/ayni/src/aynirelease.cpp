@@ -27,9 +27,13 @@
 #include <openspace/misc/exception.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <charconv>
 #include <cmath>
+#include <cstdint>
 #include <format>
 #include <limits>
+#include <optional>
+#include <system_error>
 
 namespace {
     using namespace openspace;
@@ -104,6 +108,48 @@ namespace {
         }
         if (isDirectory || result.empty()) {
             result += '/';
+        }
+        return result;
+    }
+
+    // The value of the attribute `name` of the XML start tag `tag`, if it has one.
+    std::optional<std::string_view> attribute(std::string_view tag,
+                                              std::string_view name)
+    {
+        size_t pos = tag.find(name);
+        while (pos != std::string_view::npos) {
+            const size_t end = pos + name.size();
+            const bool isName = pos > 0 &&
+                (tag[pos - 1] == ' ' || tag[pos - 1] == '\t' ||
+                 tag[pos - 1] == '\n' || tag[pos - 1] == '\r');
+            if (isName && end + 1 < tag.size() && tag[end] == '=' &&
+                (tag[end + 1] == '"' || tag[end + 1] == '\''))
+            {
+                const size_t close = tag.find(tag[end + 1], end + 2);
+                if (close == std::string_view::npos) {
+                    fail(std::format("The MPD's '{}' attribute is not closed", name));
+                }
+                return tag.substr(end + 2, close - end - 2);
+            }
+            pos = tag.find(name, end);
+        }
+        return std::nullopt;
+    }
+
+    // The attribute `name` of `tag` as a whole number of at least `minimum`, or
+    // `fallback` if `tag` does not have it.
+    uint64_t integerAttribute(std::string_view tag, std::string_view name,
+                              uint64_t minimum, uint64_t fallback)
+    {
+        const std::optional<std::string_view> value = attribute(tag, name);
+        if (!value.has_value()) {
+            return fallback;
+        }
+        uint64_t result = 0;
+        const char* last = value->data() + value->size();
+        const auto [ptr, ec] = std::from_chars(value->data(), last, result);
+        if (ec != std::errc() || ptr != last || result < minimum) {
+            fail(std::format("The MPD's '{}' is not a valid number", name));
         }
         return result;
     }
@@ -371,16 +417,30 @@ Release parseRelease(std::string_view releaseJson, std::string_view releaseUrl) 
         stringMember(member(json, "initialization"), "url")
     );
 
+    if (json.contains("mpd")) {
+        release.mpdUrl = resolveUrl(releaseUrl, stringMember(json["mpd"], "url"));
+    }
+
     const nlohmann::json& segments = member(json, "segments");
     if (!segments.is_array() || segments.empty()) {
         fail("The release has no segments");
     }
     for (const nlohmann::json& s : segments) {
+        // A segment comes with its length in a `media` block, or as a bare address
+        // whose length only the release's MPD has
         Segment segment;
-        segment.url = resolveUrl(releaseUrl, stringMember(member(s, "media"), "url"));
-        segment.durationSeconds = numberMember(s, "durationSeconds");
-        if (!(segment.durationSeconds > 0.0)) {
-            fail("A segment must have a positive duration");
+        const std::string url = s.contains("media") ?
+            stringMember(s["media"], "url") :
+            stringMember(s, "url");
+        segment.url = resolveUrl(releaseUrl, url);
+        if (s.contains("durationSeconds")) {
+            segment.durationSeconds = numberMember(s, "durationSeconds");
+            if (!(segment.durationSeconds > 0.0)) {
+                fail("A segment must have a positive duration");
+            }
+        }
+        else if (release.mpdUrl.empty()) {
+            fail("A segment has no duration and the release has no MPD");
         }
         release.segments.push_back(std::move(segment));
     }
@@ -389,6 +449,64 @@ Release parseRelease(std::string_view releaseJson, std::string_view releaseUrl) 
         release.valueEncoding = parseEncoding(json["valueEncoding"], release.frameSize);
     }
     return release;
+}
+
+void setSegmentDurations(Release& release, std::string_view mpd) {
+    const size_t timeline = mpd.find("<SegmentTimeline");
+    const size_t timelineEnd = mpd.find("</SegmentTimeline>", timeline);
+    if (timeline == std::string_view::npos || timelineEnd == std::string_view::npos) {
+        fail("The MPD has no segment timeline");
+    }
+
+    // The timescale is an attribute of the SegmentList or SegmentTemplate around it
+    size_t container = mpd.rfind("<SegmentList", timeline);
+    const size_t segmentTemplate = mpd.rfind("<SegmentTemplate", timeline);
+    if (segmentTemplate != std::string_view::npos &&
+        (container == std::string_view::npos || segmentTemplate > container))
+    {
+        container = segmentTemplate;
+    }
+    uint64_t timescale = 1;
+    if (container != std::string_view::npos) {
+        const std::string_view tag =
+            mpd.substr(container, mpd.find('>', container) - container);
+        timescale = integerAttribute(tag, "timescale", 1, 1);
+    }
+
+    // Each `<S d="..." r="..."/>` stands for r + 1 segments of length d
+    constexpr uint64_t MaxRepeat = 100000;
+    std::vector<double> durations;
+    size_t pos = mpd.find("<S", timeline + 1);
+    while (pos < timelineEnd) {
+        const char next = mpd[pos + 2];
+        if (next == ' ' || next == '\t' || next == '\n' || next == '\r' || next == '/') {
+            const std::string_view tag = mpd.substr(pos, mpd.find('>', pos) - pos);
+            const uint64_t d = integerAttribute(tag, "d", 1, 0);
+            if (d == 0) {
+                fail("A segment of the MPD's timeline has no duration");
+            }
+            const uint64_t repeat = integerAttribute(tag, "r", 0, 0);
+            if (repeat > MaxRepeat) {
+                fail("The MPD's timeline repeats a segment too often");
+            }
+            durations.insert(
+                durations.end(),
+                repeat + 1,
+                static_cast<double>(d) / static_cast<double>(timescale)
+            );
+        }
+        pos = mpd.find("<S", pos + 2);
+    }
+
+    if (durations.size() != release.segments.size()) {
+        fail(std::format(
+            "The MPD lists {} segments, but the release has {}",
+            durations.size(), release.segments.size()
+        ));
+    }
+    for (size_t i = 0; i < durations.size(); i++) {
+        release.segments[i].durationSeconds = durations[i];
+    }
 }
 
 std::string openspaceDateTime(std::string_view iso) {

@@ -43,6 +43,7 @@
 #include <openspace/opengl/textureunit.h>
 #include <openspace/rendering/renderengine.h>
 #include <openspace/util/httprequest.h>
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <filesystem>
@@ -119,11 +120,14 @@ namespace {
         }
 
         // libmpv sends the token with every request it makes for the playlist, so the
-        // playlist must not point anywhere but the stream host
+        // playlist must not point anywhere but the stream host, and neither may the MPD
         if (token.has_value()) {
             bool isOnStreamHost = ayni::isOnStreamHost(release.initializationUrl);
             for (const ayni::Segment& segment : release.segments) {
                 isOnStreamHost = isOnStreamHost && ayni::isOnStreamHost(segment.url);
+            }
+            if (!release.mpdUrl.empty()) {
+                isOnStreamHost = isOnStreamHost && ayni::isOnStreamHost(release.mpdUrl);
             }
             if (!isOnStreamHost) {
                 throw RuntimeError(
@@ -134,6 +138,17 @@ namespace {
                     std::string(_loggerCat)
                 );
             }
+        }
+
+        // Historical releases, such as the maps of other bodies, leave the segment
+        // lengths to their MPD
+        const bool hasLengths = std::all_of(
+            release.segments.begin(),
+            release.segments.end(),
+            [](const ayni::Segment& segment) { return segment.durationSeconds > 0.0; }
+        );
+        if (!hasLengths) {
+            ayni::setSegmentDurations(release, download(release.mpdUrl, token));
         }
         return release;
     }
