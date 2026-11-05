@@ -332,6 +332,18 @@ namespace {
         }
     };
 
+    constexpr BoolPropertyInfo FlyAlongVRControllerInfo = {
+        .identifier = "FlyAlongVRController",
+        .name = "Fly along VR controller",
+        .description = "When set to true and the right hand controller of a VR headset "
+            "is tracked, free flight moves forward and back along the pointing ray of "
+            "that controller instead of the view direction of the camera.",
+        .visibility = Visibility::AdvancedUser,
+        .defaults = {
+            .value = true
+        }
+    };
+
     constexpr BoolPropertyInfo ShouldRotateAroundUpInfo = {
         .identifier = "ShouldRotateAroundUp",
         .name = "Should rotate around up",
@@ -436,6 +448,7 @@ OrbitalNavigator::OrbitalNavigator()
     , _followAnchorNodeRotationDistance(FollowAnchorNodeDistanceInfo)
     , _disableZoom(DisableZoomInfo)
     , _disableRoll(DisableRollInfo)
+    , _flyAlongVRController(FlyAlongVRControllerInfo)
     , _useAdaptiveStereoscopicDepth(UseAdaptiveStereoscopicDepthInfo)
     , _stereoscopicDepthOfFocusSurface(StereoscopicDepthOfFocusSurfaceInfo)
     , _staticViewScaleExponent(StaticViewScaleExponentInfo)
@@ -574,6 +587,7 @@ OrbitalNavigator::OrbitalNavigator()
             LINFO("Zooming has been enabled");
         }
     });
+    addProperty(_flyAlongVRController);
     addProperty(_disableRoll);
     _disableRoll.onChange([this]() {
         if (_disableRoll) {
@@ -1544,9 +1558,26 @@ glm::dvec3 OrbitalNavigator::translateFreely(double deltaTime,
         }
     }
 
-    const glm::dvec3 forward = cameraRotation * Camera::ViewDirectionCameraSpace;
+    glm::dvec3 forward = cameraRotation * Camera::ViewDirectionCameraSpace;
     const glm::dvec3 up = cameraRotation * Camera::UpDirectionCameraSpace;
-    const glm::dvec3 right = glm::normalize(glm::cross(forward, up));
+    if (_flyAlongVRController) {
+        // The controller pose is in the space of the view matrix passed to rendering,
+        // which is the camera's own frame, so the camera rotation takes the pointing
+        // direction to world space
+        const std::optional<glm::mat4> pose =
+            global::windowDelegate->vrControllerAimPose(1);
+        if (pose.has_value()) {
+            const glm::dvec3 rayDirection =
+                glm::dmat3(*pose) * glm::dvec3(Camera::ViewDirectionCameraSpace);
+            forward = cameraRotation * glm::normalize(rayDirection);
+        }
+    }
+    // A controller pointing straight up or down has no sideways direction relative to
+    // the camera's up vector, so the camera's own right vector is used instead
+    const glm::dvec3 forwardCrossUp = glm::cross(forward, up);
+    const glm::dvec3 right = glm::length(forwardCrossUp) > 1e-6 ?
+        glm::normalize(forwardCrossUp) :
+        cameraRotation * glm::dvec3(1.0, 0.0, 0.0);
     const glm::dvec3 direction =
         forward * velocity.y + right * velocity.x + up * velocity.z;
     return cameraPosition + direction * distance * deltaTime;

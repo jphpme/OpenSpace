@@ -13,6 +13,11 @@ local OpenXRControllers = {
   RightTrigger = 5,
   LeftGrip = 6,
   RightGrip = 7,
+  -- How fast the right pointing ray turns while the right trigger is held
+  RightDrag = {
+    LeftRight = 8,
+    UpDown = 9
+  },
   A = 0,
   B = 1,
   X = 2,
@@ -35,18 +40,25 @@ local NormalSensitivity = 5.0
 -- Locked: the left thumbstick orbits around the focus, the right one zooms (up and
 -- down) and turns the view in place (left and right).
 -- Free flight: the left thumbstick turns left and right and flies up and down, the right
--- one flies forward and back (up and down) and sideways (left and right)
+-- one flies forward and back (up and down) and sideways (left and right). Forward is
+-- along the right controller's pointing ray (see the FlyAlongVRController property).
+-- Holding the right trigger and moving the controller drags the focus around when
+-- locked; the body follows the hand, so the drag orbits opposite to the thumbstick
 local LockedAxes = {
   { OpenXRControllers.LeftThumbStick.LeftRight, "Orbit X", false },
   { OpenXRControllers.LeftThumbStick.UpDown, "Orbit Y", true },
   { OpenXRControllers.RightThumbStick.UpDown, "Zoom", true },
-  { OpenXRControllers.RightThumbStick.LeftRight, "Pan X", true }
+  { OpenXRControllers.RightThumbStick.LeftRight, "Pan X", true },
+  { OpenXRControllers.RightDrag.LeftRight, "Orbit X", true },
+  { OpenXRControllers.RightDrag.UpDown, "Orbit Y", false }
 }
 local FreeFlightAxes = {
   { OpenXRControllers.LeftThumbStick.LeftRight, "Pan X", true },
   { OpenXRControllers.LeftThumbStick.UpDown, "Fly Up", true },
   { OpenXRControllers.RightThumbStick.UpDown, "Fly Forward", true },
-  { OpenXRControllers.RightThumbStick.LeftRight, "Fly Right", false }
+  { OpenXRControllers.RightThumbStick.LeftRight, "Fly Right", false },
+  { OpenXRControllers.RightDrag.LeftRight, "None", false },
+  { OpenXRControllers.RightDrag.UpDown, "None", false }
 }
 
 local function bindAxesCommand(axes)
@@ -178,6 +190,10 @@ local function bindInputs()
   openspace.navigation.setAxisDeadZone(Name, controller.LeftThumbStick.UpDown, deadzone)
   openspace.navigation.setAxisDeadZone(Name, controller.RightThumbStick.LeftRight, deadzone)
   openspace.navigation.setAxisDeadZone(Name, controller.RightThumbStick.UpDown, deadzone)
+  -- Ignores the small turns of a hand that is held still
+  local dragDeadzone = 0.03
+  openspace.navigation.setAxisDeadZone(Name, controller.RightDrag.LeftRight, dragDeadzone)
+  openspace.navigation.setAxisDeadZone(Name, controller.RightDrag.UpDown, dragDeadzone)
 
   openspace.action.triggerAction(LockedMode.Identifier)
   openspace.navigation.bindJoystickButton(
