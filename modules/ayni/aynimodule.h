@@ -27,7 +27,12 @@
 
 #include <openspace/util/openspacemodule.h>
 
+#include <modules/ayni/src/aynicatalogue.h>
+#include <openspace/properties/list/stringlistproperty.h>
 #include <memory>
+#include <optional>
+#include <string>
+#include <vector>
 
 namespace openspace {
 
@@ -46,16 +51,37 @@ public:
      * Returns the stream token holder that all AYNI layers share. It is created, and the
      * connection file read, on the first call.
      *
-     * 	hrow RuntimeError If the connection file cannot be used
+     * \throw RuntimeError If the connection file cannot be used
      */
     ayni::StreamAccess& streamAccess();
+
+    /**
+     * Returns the streams of the stream host's catalogue that can be played. The
+     * catalogue is read on the first call; this call blocks while it is read.
+     *
+     * \throw RuntimeError If the catalogue cannot be read
+     */
+    const std::vector<ayni::CatalogueStream>& catalogue();
+
+    /// Returns the identifiers of the streams that `openspace.ayni.stepStream` shows
+    std::vector<std::string> playlist() const;
+
+    /// Returns the identifier of the stream shown last, or an empty string
+    const std::string& shownStream() const;
+    void setShownStream(std::string identifier);
+
+    LuaLibrary luaLibrary() const override;
 
 protected:
     void internalInitialize(const Dictionary& dict) override;
     void internalDeinitialize() override;
 
 private:
+    StringListProperty _playlist;
+
     std::unique_ptr<ayni::StreamAccess> _streamAccess;
+    std::optional<std::vector<ayni::CatalogueStream>> _catalogue;
+    std::string _shownStream;
 };
 
 } // namespace openspace

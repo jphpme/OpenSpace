@@ -27,7 +27,9 @@ local OpenXRControllers = {
 local Name = "OpenXR Controllers"
 
 -- Joystick sensitivity while a grip is held, and when it is released. The normal value
--- matches the one set in the vr profile
+-- matches the one set in the vr profile. The sensitivity also tells whether a grip is
+-- held when another button is pressed
+local SensitivityUri = "NavigationHandler.OrbitalNavigator.Input.JoystickSensitivity"
 local PrecisionSensitivity = 1.0
 local NormalSensitivity = 5.0
 
@@ -230,6 +232,55 @@ local FlyToPreviousBody = {
   IsLocal = true
 }
 
+-- Returns Lua code that shows the AYNI stream `step` places after (or before, if
+-- negative) the one shown last in the AYNI playlist, and names it. It does nothing
+-- without the Ayni module
+local function stepStreamCommand(step)
+  return string.format([[
+    if openspace.ayni then
+      local isShown, result = pcall(openspace.ayni.stepStream, %d)
+      local text = isShown and ("Showing " .. result) or "Could not show the stream"
+      %s
+    end
+  ]],
+    step, showMessageCommand("text")
+  )
+end
+
+local ShowNextStream = {
+  Identifier = "os.vr.ShowNextStream",
+  Name = "Show the next AYNI stream",
+  Command = stepStreamCommand(1),
+  Documentation = [[
+    Shows the next stream of the AYNI playlist (Modules.Ayni.Playlist) and names it]],
+  GuiPath = "/Navigation/VR",
+  IsLocal = false
+}
+
+local ShowPreviousStream = {
+  Identifier = "os.vr.ShowPreviousStream",
+  Name = "Show the previous AYNI stream",
+  Command = stepStreamCommand(-1),
+  Documentation = [[
+    Shows the previous stream of the AYNI playlist (Modules.Ayni.Playlist) and names it]],
+  GuiPath = "/Navigation/VR",
+  IsLocal = false
+}
+
+-- Returns Lua code that triggers the action `gripAction` if a grip is held, and the
+-- action `action` otherwise
+local function withGripCommand(gripAction, action)
+  return string.format([[
+    if openspace.propertyValue(%q) < %s then
+      openspace.action.triggerAction(%q)
+    else
+      openspace.action.triggerAction(%q)
+    end
+  ]],
+    SensitivityUri, NormalSensitivity, gripAction, action
+  )
+end
+
 local function bindInputs()
   local controller = OpenXRControllers
   local deadzone = 0.15
@@ -248,12 +299,11 @@ local function bindInputs()
   )
 
   -- Holding a grip makes all movement slower for fine adjustments
-  local sensitivityUri = "NavigationHandler.OrbitalNavigator.Input.JoystickSensitivity"
   for _, grip in ipairs({ controller.LeftGripButton, controller.RightGripButton }) do
     openspace.navigation.bindJoystickButton(
       Name,
       grip,
-      "openspace.setPropertyValueSingle('" .. sensitivityUri .. "', " ..
+      "openspace.setPropertyValueSingle('" .. SensitivityUri .. "', " ..
         PrecisionSensitivity .. ")",
       "Slow down movement while the grip is held",
       "Press"
@@ -261,25 +311,26 @@ local function bindInputs()
     openspace.navigation.bindJoystickButton(
       Name,
       grip,
-      "openspace.setPropertyValueSingle('" .. sensitivityUri .. "', " ..
+      "openspace.setPropertyValueSingle('" .. SensitivityUri .. "', " ..
         NormalSensitivity .. ")",
       "Restore the movement speed when the grip is released",
       "Release"
     )
   end
 
-  -- Right hand: travel between bodies. Left hand: time
+  -- Right hand: travel between bodies, or with a grip held step through the AYNI
+  -- streams. Left hand: time
   openspace.navigation.bindJoystickButton(
     Name,
     controller.A,
-    "openspace.action.triggerAction('" .. FlyToNextBody.Identifier .. "')",
-    "Fly to the next body"
+    withGripCommand(ShowNextStream.Identifier, FlyToNextBody.Identifier),
+    "Fly to the next body, or show the next AYNI stream while a grip is held"
   )
   openspace.navigation.bindJoystickButton(
     Name,
     controller.B,
-    "openspace.action.triggerAction('" .. FlyToPreviousBody.Identifier .. "')",
-    "Fly to the previous body"
+    withGripCommand(ShowPreviousStream.Identifier, FlyToPreviousBody.Identifier),
+    "Fly to the previous body, or show the previous AYNI stream while a grip is held"
   )
   openspace.navigation.bindJoystickButton(
     Name,
@@ -315,11 +366,15 @@ asset.onInitialize(function()
   openspace.action.registerAction(ToggleNavigationMode)
   openspace.action.registerAction(FlyToNextBody)
   openspace.action.registerAction(FlyToPreviousBody)
+  openspace.action.registerAction(ShowNextStream)
+  openspace.action.registerAction(ShowPreviousStream)
   bindInputs()
 end)
 
 asset.onDeinitialize(function()
   openspace.navigation.unbindJoystick(Name)
+  openspace.action.removeAction(ShowPreviousStream)
+  openspace.action.removeAction(ShowNextStream)
   openspace.action.removeAction(FlyToPreviousBody)
   openspace.action.removeAction(FlyToNextBody)
   openspace.action.removeAction(ToggleNavigationMode)
@@ -333,6 +388,8 @@ asset.export("FreeFlightMode", FreeFlightMode.Identifier)
 asset.export("ToggleNavigationMode", ToggleNavigationMode.Identifier)
 asset.export("FlyToNextBody", FlyToNextBody.Identifier)
 asset.export("FlyToPreviousBody", FlyToPreviousBody.Identifier)
+asset.export("ShowNextStream", ShowNextStream.Identifier)
+asset.export("ShowPreviousStream", ShowPreviousStream.Identifier)
 
 
 
@@ -344,7 +401,8 @@ asset.meta = {
     thumbstick turns and flies up and down, the right thumbstick flies forward, back and
     sideways along the right controller's ray. Clicking the right thumbstick switches
     between the two, and locking focuses on the closest body. A and B fly to the next
-    and previous body. Holding a grip slows down movement. X and Y step time backwards
+    and previous body; with a grip held they show the next and previous stream of the
+    AYNI playlist. Holding a grip slows down movement. X and Y step time backwards
     and forwards, the left thumbstick click pauses time and the menu button returns to
     realtime
   ]],

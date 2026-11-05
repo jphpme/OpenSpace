@@ -28,15 +28,50 @@
 #include <modules/ayni/src/aynistreamtileprovider.h>
 #include <modules/globebrowsing/src/tileprovider/tileprovider.h>
 #include <openspace/documentation/documentation.h>
+#include <openspace/logging/logmanager.h>
 #include <openspace/misc/assert.h>
+#include <openspace/misc/exception.h>
 #include <openspace/misc/templatefactory.h>
+#include <openspace/scripting/lualibrary.h>
 #include <openspace/util/factorymanager.h>
+#include <openspace/util/httprequest.h>
+#include <array>
+#include <chrono>
+#include <format>
+#include <string_view>
+
+#include "aynimodule_lua.inl"
+
+namespace {
+    constexpr std::string_view _loggerCat = "AyniModule";
+
+    // Realtime Earth streams that show what AYNI streams are
+    constexpr std::array<std::string_view, 7> DefaultPlaylist = {
+        "clouds", "aod550", "ostia_sst_nrt", "imerg_precip_nrt", "land_surface_temp",
+        "firms_fires", "surface_o3"
+    };
+
+    constexpr openspace::StringListPropertyInfo PlaylistInfo = {
+        .identifier = "Playlist",
+        .name = "Playlist",
+        .description = "The streams, by their identifier in the stream host's "
+            "catalogue, that the next and previous stream actions show in turn, as the "
+            "VR controllers do. Streams that are not in the catalogue, or whose globe is "
+            "not in the scene, are skipped. If the list is empty, the actions go through "
+            "every stream.",
+        .visibility = openspace::Visibility::User
+    };
+} // namespace
 
 namespace openspace {
 
 AyniModule::AyniModule()
     : OpenSpaceModule(AyniModule::Name)
-{}
+    , _playlist(PlaylistInfo)
+{
+    _playlist = std::vector<std::string>(DefaultPlaylist.begin(), DefaultPlaylist.end());
+    addProperty(_playlist);
+}
 
 AyniModule::~AyniModule() = default;
 
@@ -58,9 +93,50 @@ ayni::StreamAccess& AyniModule::streamAccess() {
     return *_streamAccess;
 }
 
+const std::vector<ayni::CatalogueStream>& AyniModule::catalogue() {
+    if (!_catalogue.has_value()) {
+        HttpMemoryDownload request = HttpMemoryDownload(std::string(ayni::CatalogueUrl));
+        request.start(std::chrono::seconds(30));
+        if (!request.wait()) {
+            throw RuntimeError(
+                std::format("Could not read the catalogue '{}'", ayni::CatalogueUrl),
+                std::string(_loggerCat)
+            );
+        }
+        const std::vector<char>& data = request.downloadedData();
+        _catalogue = ayni::parseCatalogue(std::string_view(data.data(), data.size()));
+        LINFO(std::format("The AYNI catalogue has {} streams", _catalogue->size()));
+    }
+    return *_catalogue;
+}
+
+std::vector<std::string> AyniModule::playlist() const {
+    return _playlist;
+}
+
+const std::string& AyniModule::shownStream() const {
+    return _shownStream;
+}
+
+void AyniModule::setShownStream(std::string identifier) {
+    _shownStream = std::move(identifier);
+}
+
 std::vector<Documentation> AyniModule::documentations() const {
     return {
         AyniStreamTileProvider::Documentation()
+    };
+}
+
+LuaLibrary AyniModule::luaLibrary() const {
+    return {
+        .name = "ayni",
+        .functions = {
+            codegen::lua::Streams,
+            codegen::lua::ShowStream,
+            codegen::lua::HideStreams,
+            codegen::lua::StepStream
+        }
     };
 }
 

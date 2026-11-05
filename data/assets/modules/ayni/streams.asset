@@ -1,0 +1,88 @@
+-- One action per AYNI stream, in the Actions panel under /AYNI/<globe>/<category>.
+-- Showing a stream removes the one shown before. The streams come from the stream host's
+-- catalogue, which is read when this asset loads
+local HideStreams = {
+  Identifier = "os.ayni.HideStreams",
+  Name = "Hide the AYNI stream",
+  Command = "openspace.ayni.hideStreams()",
+  Documentation = "Removes the AYNI stream from the globe it is shown on",
+  GuiPath = "/AYNI",
+  IsLocal = false
+}
+
+local NextStream = {
+  Identifier = "os.ayni.NextStream",
+  Name = "Show the next AYNI stream",
+  Command = "openspace.ayni.stepStream(1)",
+  Documentation = [[
+    Shows the next stream of the playlist that the Modules.Ayni.Playlist property lists]],
+  GuiPath = "/AYNI",
+  IsLocal = false
+}
+
+local PreviousStream = {
+  Identifier = "os.ayni.PreviousStream",
+  Name = "Show the previous AYNI stream",
+  Command = "openspace.ayni.stepStream(-1)",
+  Documentation = [[
+    Shows the previous stream of the playlist that the Modules.Ayni.Playlist property
+    lists]],
+  GuiPath = "/AYNI",
+  IsLocal = false
+}
+
+-- The actions made from the catalogue, to remove them again
+local StreamActions = {}
+
+asset.onInitialize(function()
+  openspace.action.registerAction(HideStreams)
+  openspace.action.registerAction(NextStream)
+  openspace.action.registerAction(PreviousStream)
+
+  local isRead, streams = pcall(openspace.ayni.streams)
+  if not isRead then
+    openspace.printWarning("The AYNI streams are not available: " .. tostring(streams))
+    return
+  end
+  for _, stream in ipairs(streams) do
+    local action = {
+      Identifier = "os.ayni.Show_" .. stream.Identifier,
+      Name = stream.Name,
+      Command = string.format("openspace.ayni.showStream(%q)", stream.Identifier),
+      Documentation = stream.Description,
+      GuiPath = "/AYNI/" .. stream.Globe .. "/" .. stream.Category,
+      IsLocal = false
+    }
+    openspace.action.registerAction(action)
+    table.insert(StreamActions, action)
+  end
+end)
+
+asset.onDeinitialize(function()
+  for i = #StreamActions, 1, -1 do
+    openspace.action.removeAction(StreamActions[i])
+  end
+  StreamActions = {}
+  openspace.action.removeAction(PreviousStream)
+  openspace.action.removeAction(NextStream)
+  openspace.action.removeAction(HideStreams)
+end)
+
+asset.export("HideStreams", HideStreams.Identifier)
+asset.export("NextStream", NextStream.Identifier)
+asset.export("PreviousStream", PreviousStream.Identifier)
+
+
+
+asset.meta = {
+  Name = "AYNI streams",
+  Description = [[
+    Actions that show the value-encoded AYNI streams on the globes they cover, one at a
+    time: one action per stream in the stream host's catalogue, grouped by globe and
+    category, and actions for the next and previous stream of the playlist. Licensed
+    streams need the OpenSpace connection file of an AYNI XR plan in
+    ${USER}/ayni/connection.json]],
+  Author = "OpenSpace in VR",
+  URL = "https://github.com/jphpme/OpenSpace",
+  License = "MIT license"
+}
