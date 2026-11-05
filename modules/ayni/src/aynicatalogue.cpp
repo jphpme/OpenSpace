@@ -114,7 +114,7 @@ std::vector<CatalogueStream> parseCatalogue(std::string_view json) {
     std::vector<CatalogueStream> streams;
     for (const nlohmann::json& entry : *datasets) {
         if (!entry.is_object() || stringField(entry, "type") != "stream" ||
-            !isTrue(entry, "valueEncoded") || stringField(entry, "coverage") != "global")
+            !isTrue(entry, "valueEncoded"))
         {
             continue;
         }
@@ -133,6 +133,15 @@ std::vector<CatalogueStream> parseCatalogue(std::string_view json) {
             continue;
         }
         stream.url = std::format("{}{}", StreamHost, path);
+        if (stringField(entry, "coverage") != "global") {
+            stream.region = stringField(entry, "regionName");
+            if (stream.region.empty()) {
+                stream.region = capitalized(stringField(entry, "region"));
+            }
+            if (stream.region.empty()) {
+                stream.region = "Other regions";
+            }
+        }
 
         const auto categories = entry.find("categories");
         if (categories != entry.end() && categories->is_array() &&

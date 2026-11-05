@@ -45,13 +45,15 @@ struct CatalogueStream {
     std::string category;
     /// The scene graph node of the globe the stream covers, such as `Earth` or `Mars`
     std::string globe;
+    /// The region the stream covers, such as "Spain", or empty for the whole globe
+    std::string region;
     /// The address of the stream's release pointer (its `latest.json`)
     std::string url;
 };
 
 /**
  * Parses the stream host's catalogue and returns the streams that the AYNI stream layer
- * can play: the value-encoded streams that cover a whole globe. Entries that are
+ * can play: the value-encoded streams, of whole globes and of regions. Entries that are
  * incomplete, or whose release pointer is not on the stream host, are left out.
  *
  * \param json The contents of the catalogue

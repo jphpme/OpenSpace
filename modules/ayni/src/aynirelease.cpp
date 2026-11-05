@@ -162,6 +162,20 @@ namespace {
             fail("'dataRegion' does not fit in the frame");
         }
 
+        if (json.contains("geo") && json["geo"].is_object()) {
+            const nlohmann::json& geo = json["geo"];
+            enc.latTop = numberMember(geo, "latTop");
+            enc.latBottom = numberMember(geo, "latBottom");
+            enc.lonLeft = numberMember(geo, "lonLeft");
+            enc.lonRight = numberMember(geo, "lonRight");
+        }
+        const bool isOnGlobe =
+            enc.latBottom >= -90.0 && enc.latBottom < enc.latTop && enc.latTop <= 90.0 &&
+            enc.lonLeft >= -180.0 && enc.lonLeft < enc.lonRight && enc.lonRight <= 180.0;
+        if (!isOnGlobe) {
+            fail("'geo' is not a region of the globe between -180 and 180 degrees");
+        }
+
         if (json.contains("classes") && json["classes"].is_array()) {
             for (const nlohmann::json& c : json["classes"]) {
                 ValueClass vc;
