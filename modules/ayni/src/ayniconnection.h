@@ -85,7 +85,8 @@ StreamToken parseStreamToken(std::string_view json);
  * Holds the stream token of this installation's connection, which is read from
  * `${USER}/ayni/connection.json`. Tokens live for ten minutes, so #update renews the
  * token in the background while streams play. A connection that the AYNI XR site no
- * longer knows, or whose licence does not include OpenSpace, is not asked again.
+ * longer knows is not asked again; one whose licence does not include OpenSpace or any
+ * streams is asked again once an hour, as a renewed licence makes the same file work.
  */
 class StreamAccess {
 public:

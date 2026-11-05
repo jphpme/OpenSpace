@@ -51,6 +51,8 @@ namespace {
     constexpr std::chrono::seconds MinimumWait = std::chrono::seconds(30);
     // The AYNI XR site asks for this wait when it limits the requests
     constexpr std::chrono::seconds RateLimitWait = std::chrono::seconds(60);
+    // A licence without OpenSpace or streams may be renewed or extended later
+    constexpr std::chrono::hours LicenceWait = std::chrono::hours(1);
     constexpr std::chrono::seconds RequestTimeout = std::chrono::seconds(20);
 
     [[noreturn]] void fail(std::string message) {
@@ -204,7 +206,10 @@ std::optional<std::string> StreamAccess::token() {
         return std::nullopt;
     }
     if (_token.empty()) {
-        if (!_isRefused) {
+        // Another layer may just have been refused; do not ask again before it is time
+        const bool isWaiting = !_lastError.empty() &&
+            std::chrono::steady_clock::now() < _nextRequest;
+        if (!_isRefused && !isWaiting) {
             if (!_request) {
                 startRequest();
             }
@@ -286,9 +291,10 @@ void StreamAccess::finishRequest() {
         LERROR(_lastError);
     }
     else if (error == "no_openspace" || error == "no_streams") {
-        _isRefused = true;
+        _nextRequest = now + LicenceWait;
         _lastError = std::format(
-            "The AYNI XR licence of the connection '{}' does not include {}",
+            "The AYNI XR licence of the connection '{}' does not include {}; OpenSpace "
+            "asks again in an hour",
             label, error == "no_openspace" ? "OpenSpace" : "any streams"
         );
         LERROR(_lastError);
