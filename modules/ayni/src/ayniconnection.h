@@ -41,6 +41,9 @@ constexpr std::string_view StreamHost = "https://pachamama-studios.stream/";
 /// Returns whether \p url is a URL on the AYNI stream host.
 bool isOnStreamHost(std::string_view url);
 
+/// Returns the HTTP header that presents \p token to the AYNI stream host.
+std::string authorizationHeader(std::string_view token);
+
 /**
  * A connection, the file that an AYNI XR plan hands out per installation: an OpenSpace
  * connection for a dome (`ayni-xr.openspace-connection.v1`) or a node connection of the
