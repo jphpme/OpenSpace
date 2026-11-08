@@ -42,11 +42,14 @@ namespace {
 
     constexpr std::string_view _loggerCat = "AyniConnection";
 
-    constexpr std::string_view ConnectionSchema = "ayni-xr.openspace-connection.v1";
-    constexpr std::string_view TokenRoute = "api/openspace/token";
+    // A dome's OpenSpace connection, exchanged at the OpenSpace route of its server
+    constexpr std::string_view OpenSpaceSchema = "ayni-xr.openspace-connection.v1";
+    constexpr std::string_view OpenSpaceTokenRoute = "api/openspace/token";
+    // A node connection of the `ayni-access/1` profile, which names its token endpoint
+    constexpr std::string_view NodeSchema = "ayni-xr.node-connection.v1";
 
-    // A token is renewed this long before it expires, so a few failed attempts do not
-    // interrupt the streams
+    // Without a `renewAfter` in the answer, a token is renewed this long before it
+    // expires, so a few failed attempts do not interrupt the streams
     constexpr std::chrono::seconds RenewBefore = std::chrono::seconds(150);
     constexpr std::chrono::seconds MinimumWait = std::chrono::seconds(30);
     // The AYNI XR site asks for this wait when it limits the requests
@@ -87,11 +90,10 @@ namespace {
             );
     }
 
-    bool isConnectionId(std::string_view id) {
-        constexpr std::string_view Prefix = "osc_";
-        return id.size() == Prefix.size() + 16 && id.starts_with(Prefix) &&
+    bool isConnectionId(std::string_view id, std::string_view prefix) {
+        return id.size() == prefix.size() + 16 && id.starts_with(prefix) &&
             std::all_of(
-                id.begin() + Prefix.size(),
+                id.begin() + prefix.size(),
                 id.end(),
                 [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); }
             );
@@ -121,8 +123,10 @@ bool isOnStreamHost(std::string_view url) {
 
 Connection parseConnection(std::string_view json) {
     const nlohmann::json file = nlohmann::json::parse(json, nullptr, false);
-    if (!file.is_object() || stringField(file, "schema") != ConnectionSchema) {
-        fail("The file is not an AYNI XR OpenSpace connection");
+    const std::string schema = file.is_object() ? stringField(file, "schema") : "";
+    const bool isNode = schema == NodeSchema;
+    if (!isNode && schema != OpenSpaceSchema) {
+        fail("The file is not an AYNI XR OpenSpace or node connection");
     }
 
     Connection connection = {
@@ -137,8 +141,24 @@ Connection parseConnection(std::string_view json) {
     if (!connection.server.ends_with('/')) {
         connection.server += '/';
     }
-    if (!isConnectionId(connection.id) || !isSecret(connection.secret)) {
+    const std::string_view prefix = isNode ? "anc_" : "osc_";
+    if (!isConnectionId(connection.id, prefix) || !isSecret(connection.secret)) {
         fail("The connection's identifier or secret is damaged");
+    }
+
+    if (isNode) {
+        // The secret is only ever sent to the site that issued it
+        connection.tokenEndpoint = stringField(file, "token_endpoint");
+        if (!isServerUrl(connection.tokenEndpoint) ||
+            !connection.tokenEndpoint.starts_with(connection.server))
+        {
+            fail("The connection's token endpoint is not on its server");
+        }
+    }
+    else {
+        connection.tokenEndpoint = std::format(
+            "{}{}", connection.server, OpenSpaceTokenRoute
+        );
     }
     return connection;
 }
@@ -178,6 +198,25 @@ StreamToken parseStreamToken(std::string_view json) {
     {
         fail("The answer of AYNI XR gives the token an impossible lifetime");
     }
+
+    token.renewAfter = token.lifetime - RenewBefore;
+    const auto renewAfter = answer.find("renewAfter");
+    if (renewAfter != answer.end()) {
+        if (!renewAfter->is_number()) {
+            fail("The answer of AYNI XR does not say when to renew the token");
+        }
+        const int64_t renewMs = renewAfter->get<int64_t>() - issuedAt->get<int64_t>();
+        token.renewAfter = std::chrono::seconds(renewMs / 1000);
+        if (token.renewAfter <= std::chrono::seconds(0) ||
+            token.renewAfter > token.lifetime)
+        {
+            fail("The answer of AYNI XR renews the token at an impossible time");
+        }
+    }
+
+    // A `use` of null is a licence outside the use classes
+    token.use = stringField(answer, "use");
+    token.plan = stringField(answer, "plan");
     return token;
 }
 
@@ -192,7 +231,10 @@ StreamAccess::StreamAccess() {
     catch (const RuntimeError& e) {
         fail(std::format("Could not use '{}': {}", path.string(), e.message));
     }
-    LINFO(std::format("Using the AYNI XR connection '{}'", _connection->label));
+    LINFO(std::format(
+        "Using the AYNI XR {} connection '{}'",
+        _connection->id.starts_with("anc_") ? "node" : "OpenSpace", _connection->label
+    ));
 }
 
 StreamAccess::~StreamAccess() = default;
@@ -247,7 +289,7 @@ std::chrono::steady_clock::time_point StreamAccess::expiresAt() const {
 
 void StreamAccess::startRequest() {
     _request = std::make_unique<HttpMemoryDownload>(
-        std::format("{}{}", _connection->server, TokenRoute),
+        _connection->tokenEndpoint,
         logging::LogLevel::Debug
     );
     _request->addRequestHeader(
@@ -271,8 +313,16 @@ void StreamAccess::finishRequest() {
             _token = std::move(token.token);
             _generation++;
             _expiresAt = now + token.lifetime;
-            _nextRequest = now + std::max(token.lifetime - RenewBefore, MinimumWait);
+            _nextRequest = now + std::max(token.renewAfter, MinimumWait);
             LDEBUG("Received a new AYNI stream token");
+            if (!token.plan.empty() && token.plan != _plan) {
+                _plan = token.plan;
+                LINFO(std::format(
+                    "The AYNI XR connection '{}' plays the streams of the plan '{}'{}",
+                    _connection->label, _plan,
+                    token.use.empty() ? "" : std::format(" for {}", token.use)
+                ));
+            }
         }
         catch (const RuntimeError& e) {
             _lastError = e.message;
@@ -295,12 +345,21 @@ void StreamAccess::finishRequest() {
         );
         LERROR(_lastError);
     }
-    else if (error == "no_openspace" || error == "no_streams") {
+    else if (error == "no_openspace" || error == "no_node_access" ||
+             error == "no_streams")
+    {
+        std::string_view missing = "any streams";
+        if (error == "no_openspace") {
+            missing = "OpenSpace";
+        }
+        else if (error == "no_node_access") {
+            missing = "node access";
+        }
         _nextRequest = now + LicenceWait;
         _lastError = std::format(
             "The AYNI XR licence of the connection '{}' does not include {}; OpenSpace "
             "asks again in an hour",
-            label, error == "no_openspace" ? "OpenSpace" : "any streams"
+            label, missing
         );
         LERROR(_lastError);
     }

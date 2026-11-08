@@ -83,8 +83,8 @@ asset.meta = {
     Actions that show the value-encoded AYNI streams on the globes and regions they
     cover, one at a time: one action per stream in the stream host's catalogue, grouped
     by globe and category or region, and actions for the next and previous stream of
-    the playlist. Licensed streams need the OpenSpace connection file of an AYNI XR plan
-    in ${USER}/ayni/connection.json]],
+    the playlist. Licensed streams need a connection file of an AYNI XR plan, for
+    OpenSpace or for a node, in ${USER}/ayni/connection.json]],
   Author = "OpenSpace in VR",
   URL = "https://github.com/jphpme/OpenSpace",
   License = "MIT license"
