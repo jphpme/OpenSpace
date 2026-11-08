@@ -38,6 +38,7 @@
 #include <array>
 #include <chrono>
 #include <format>
+#include <optional>
 #include <string_view>
 
 #include "aynimodule_lua.inl"
@@ -96,10 +97,21 @@ ayni::StreamAccess& AyniModule::streamAccess() {
 const std::vector<ayni::CatalogueStream>& AyniModule::catalogue() {
     if (!_catalogue.has_value()) {
         HttpMemoryDownload request = HttpMemoryDownload(std::string(ayni::CatalogueUrl));
+        // The stream host lists its streams only to readers with a licence
+        const std::optional<std::string> token = streamAccess().token();
+        if (token.has_value()) {
+            request.addRequestHeader(ayni::authorizationHeader(*token));
+        }
         request.start(std::chrono::seconds(30));
         if (!request.wait()) {
+            const std::string_view hint = token.has_value() ?
+                "" :
+                ". The catalogue needs an AYNI XR connection file in "
+                "${USER}/ayni/connection.json";
             throw RuntimeError(
-                std::format("Could not read the catalogue '{}'", ayni::CatalogueUrl),
+                std::format(
+                    "Could not read the catalogue '{}'{}", ayni::CatalogueUrl, hint
+                ),
                 std::string(_loggerCat)
             );
         }

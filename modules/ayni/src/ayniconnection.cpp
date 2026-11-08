@@ -121,6 +121,10 @@ bool isOnStreamHost(std::string_view url) {
     return url.starts_with(StreamHost);
 }
 
+std::string authorizationHeader(std::string_view token) {
+    return std::format("Authorization: Bearer {}", token);
+}
+
 Connection parseConnection(std::string_view json) {
     const nlohmann::json file = nlohmann::json::parse(json, nullptr, false);
     const std::string schema = file.is_object() ? stringField(file, "schema") : "";

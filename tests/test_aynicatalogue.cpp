@@ -74,6 +74,11 @@ namespace {
           "name": "bad name", "display_name": "A name that is no identifier",
           "type": "stream", "valueEncoded": true, "coverage": "global",
           "releaseDescriptorUrl": "global/y/latest.json"
+        },
+        {
+          "name": "outside_the_licence", "display_name": "Locked for this licence",
+          "description": "The stream host says what it is, not where it is.",
+          "type": "stream", "coverage": "global", "locked": true
         }
       ]
     })";

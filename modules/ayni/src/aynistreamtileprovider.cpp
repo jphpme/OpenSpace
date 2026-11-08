@@ -73,10 +73,6 @@ namespace {
         return global::moduleEngine->module<AyniModule>()->streamAccess();
     }
 
-    std::string authorizationHeader(const std::string& token) {
-        return std::format("Authorization: Bearer {}", token);
-    }
-
     std::string download(const std::string& url,
                          const std::optional<std::string>& token)
     {
@@ -84,7 +80,7 @@ namespace {
         // lookup off the main thread once streams refresh while running
         HttpMemoryDownload request = HttpMemoryDownload(url);
         if (token.has_value() && ayni::isOnStreamHost(url)) {
-            request.addRequestHeader(authorizationHeader(*token));
+            request.addRequestHeader(ayni::authorizationHeader(*token));
         }
         request.start();
         const bool success = request.wait();
@@ -197,7 +193,10 @@ AyniStreamTileProvider::AyniStreamTileProvider(const Dictionary& dictionary)
     ayni::StreamAccess& access = streamAccess();
     const std::optional<std::string> token = access.token();
     if (token.has_value()) {
-        _videoPlayer.setMpvOption("http-header-fields", authorizationHeader(*token));
+        _videoPlayer.setMpvOption(
+            "http-header-fields",
+            ayni::authorizationHeader(*token)
+        );
     }
     _tokenGeneration = access.generation();
     _tokenExpiresAt = access.expiresAt();
@@ -284,7 +283,7 @@ void AyniStreamTileProvider::update() {
             _tokenExpiresAt = access.expiresAt();
             _videoPlayer.setMpvOption(
                 "http-header-fields",
-                authorizationHeader(*access.token())
+                ayni::authorizationHeader(*access.token())
             );
             if (hasLapsed) {
                 LINFO("Reloading the stream with a new token");
