@@ -92,7 +92,10 @@ struct ValueEncoding {
     double rampGamma = 1.0;
 };
 
-/// One media segment of a release; `url` is absolute.
+/**
+ * One media segment of a release; `url` is absolute. `durationSeconds` is 0 if the
+ * release does not give it; the release's MPD has it then (see `setSegmentDurations`).
+ */
 struct Segment {
     std::string url;
     double durationSeconds = 0.0;
@@ -112,6 +115,8 @@ struct Release {
     glm::ivec2 frameSize = glm::ivec2(0);
     std::string initializationUrl;
     std::vector<Segment> segments;
+    /// The absolute URL of the release's DASH manifest, or empty if it names none
+    std::string mpdUrl;
     std::optional<ValueEncoding> valueEncoding;
 };
 
@@ -137,6 +142,15 @@ std::string releaseUrlFromPointer(std::string_view pointerJson,
  * \throw RuntimeError If the descriptor is not a release this module can play
  */
 Release parseRelease(std::string_view releaseJson, std::string_view releaseUrl);
+
+/**
+ * Sets the length of every segment of \p release from the `SegmentTimeline` of its DASH
+ * manifest \p mpd, for releases whose descriptor leaves the lengths out.
+ *
+ * \throw RuntimeError If \p mpd has no valid segment timeline, or the timeline does not
+ *        list as many segments as \p release has
+ */
+void setSegmentDurations(Release& release, std::string_view mpd);
 
 /**
  * Converts the ISO 8601 UTC time \p iso (`2026-08-25T07:00:00Z`) into the form
