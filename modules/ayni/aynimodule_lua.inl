@@ -147,8 +147,8 @@ namespace {
 
 /**
  * Shows an AYNI stream on the globe it covers and removes the AYNI stream shown before,
- * so that one stream plays at a time. Licensed streams need the OpenSpace connection
- * file of an AYNI XR plan in `${USER}/ayni/connection.json`.
+ * so that one stream plays at a time. Licensed streams need a connection file of an AYNI
+ * XR plan, for OpenSpace or for a node, in `${USER}/ayni/connection.json`.
  *
  * \param identifier The stream's identifier, as `openspace.ayni.streams` lists it
  * \return The name of the stream

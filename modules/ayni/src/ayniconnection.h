@@ -41,15 +41,22 @@ constexpr std::string_view StreamHost = "https://pachamama-studios.stream/";
 /// Returns whether \p url is a URL on the AYNI stream host.
 bool isOnStreamHost(std::string_view url);
 
-/// An OpenSpace connection, the file that an AYNI XR plan hands out per installation
+/**
+ * A connection, the file that an AYNI XR plan hands out per installation: an OpenSpace
+ * connection for a dome (`ayni-xr.openspace-connection.v1`) or a node connection of the
+ * `ayni-access/1` profile (`ayni-xr.node-connection.v1`).
+ */
 struct Connection {
-    /// The AYNI XR site that issues the stream tokens, ending in `/`
+    /// The AYNI XR site that issued the connection, ending in `/`
     std::string server;
-    /// The connection's identifier, `osc_` followed by 16 hexadecimal digits
+    /// The connection's identifier: `osc_` (OpenSpace) or `anc_` (node) followed by 16
+    /// hexadecimal digits
     std::string id;
     std::string secret;
     /// The name the plan's owner gave this installation
     std::string label;
+    /// The address on `server` that exchanges the connection for stream tokens
+    std::string tokenEndpoint;
 };
 
 /**
@@ -58,8 +65,8 @@ struct Connection {
  * \param json The contents of the file
  * \return The connection that the file describes
  *
- * \throw RuntimeError If \p json is not a connection file of the schema
- *        `ayni-xr.openspace-connection.v1`
+ * \throw RuntimeError If \p json is not an OpenSpace or node connection file, or a node
+ *        connection names a token endpoint that is not on its own server
  */
 Connection parseConnection(std::string_view json);
 
@@ -68,10 +75,18 @@ struct StreamToken {
     std::string token;
     /// How long the token is valid, counted from when it was issued
     std::chrono::seconds lifetime = std::chrono::seconds(0);
+    /// When to ask for the next token, counted from when this one was issued
+    std::chrono::seconds renewAfter = std::chrono::seconds(0);
+    /// The use class of the connection's licence, such as `education` or `venue`, or
+    /// empty if the answer names none
+    std::string use;
+    /// The name of the connection's plan, or empty if the answer names none
+    std::string plan;
 };
 
 /**
- * Parses the answer of the AYNI XR site's token route.
+ * Parses the answer of the AYNI XR site's token route. Without a `renewAfter` in the
+ * answer, the token is renewed 150 seconds before it expires.
  *
  * \param json The body of the answer
  * \return The token that the answer holds
@@ -85,8 +100,9 @@ StreamToken parseStreamToken(std::string_view json);
  * Holds the stream token of this installation's connection, which is read from
  * `${USER}/ayni/connection.json`. Tokens live for ten minutes, so #update renews the
  * token in the background while streams play. A connection that the AYNI XR site no
- * longer knows is not asked again; one whose licence does not include OpenSpace or any
- * streams is asked again once an hour, as a renewed licence makes the same file work.
+ * longer knows is not asked again; one whose licence does not include OpenSpace, node
+ * access or any streams is asked again once an hour, as a renewed licence makes the same
+ * file work.
  */
 class StreamAccess {
 public:
@@ -122,6 +138,8 @@ private:
 
     std::optional<Connection> _connection;
     std::string _token;
+    /// The plan that the last token was issued for, to tell the operator when it changes
+    std::string _plan;
     /// Why the last request did not give a token
     std::string _lastError;
     int _generation = 0;

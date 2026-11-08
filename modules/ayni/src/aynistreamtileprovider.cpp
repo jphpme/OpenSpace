@@ -59,8 +59,8 @@ namespace {
     // the stream's release covers. The frames carry measurements rather than pictures;
     // they are coloured with the palette the release declares, codes that mean no data
     // are transparent, and the calibration strip at the edge of every frame is cropped
-    // off. Licensed streams need the OpenSpace connection file of an AYNI XR plan in
-    // `${USER}/ayni/connection.json`.
+    // off. Licensed streams need a connection file of an AYNI XR plan, for OpenSpace or
+    // for a node, in `${USER}/ayni/connection.json`.
     struct [[codegen::Dictionary(AyniStreamTileProvider)]] Parameters {
         // The URL of the stream's release pointer (its `latest.json`) or of one of its
         // releases (a `release.json`). The pointer is read once, when the layer is
