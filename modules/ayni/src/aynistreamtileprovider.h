@@ -63,6 +63,9 @@ public:
     Tile::Status tileStatus(const TileIndex& tileIndex) override;
     TileDepthTransform depthTransform() override;
 
+    /// Returns the release that the layer plays
+    const ayni::Release& release() const;
+
     static openspace::Documentation Documentation();
 
 private:
