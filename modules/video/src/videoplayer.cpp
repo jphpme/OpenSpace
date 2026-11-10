@@ -41,6 +41,7 @@
 #include <openspace/util/time.h>
 #include <openspace/util/timemanager.h>
 #include <render_gl.h>
+#include <algorithm>
 #include <cstdlib>
 #include <optional>
 
@@ -422,6 +423,26 @@ void VideoPlayer::initialize() {
     toggleMute();
 }
 
+void VideoPlayer::setMpvOption(std::string name, std::string value) {
+    if (_isInitialized) {
+        setPropertyStringMpv(name.c_str(), value.c_str());
+    }
+
+    auto it = std::find_if(
+        _mpvOptions.begin(),
+        _mpvOptions.end(),
+        [&name](const std::pair<std::string, std::string>& option) {
+            return option.first == name;
+        }
+    );
+    if (it != _mpvOptions.end()) {
+        it->second = std::move(value);
+    }
+    else {
+        _mpvOptions.emplace_back(std::move(name), std::move(value));
+    }
+}
+
 void VideoPlayer::initializeMpv() {
     _mpvHandle = mpv_create();
     if (!_mpvHandle) {
@@ -475,6 +496,10 @@ void VideoPlayer::initializeMpv() {
     // color
     if (mpv_set_property_string(_mpvHandle, "background", "none") < 0) {
         setPropertyStringMpv("alpha", "yes");
+    }
+
+    for (const auto& [name, value] : _mpvOptions) {
+        setPropertyStringMpv(name.c_str(), value.c_str());
     }
 
     // Verbose mode for debug purposes

@@ -159,6 +159,22 @@ public:
     void onData(DataCallback cb);
 
     /**
+     * Adds a header field that is sent with the request.
+     *
+     * \param header The header field in the form `Name: value`
+     */
+    void addRequestHeader(std::string header);
+
+    /**
+     * Makes the request a POST request that sends \p body. Without a `Content-Type`
+     * header added through #addRequestHeader, the body is sent as
+     * `application/x-www-form-urlencoded`.
+     *
+     * \param body The body of the request
+     */
+    void setPostBody(std::string body);
+
+    /**
      * Performs the request to the URL provided in the constructor. As this request is
      * handled synchronously, this function will only return once the request has been
      * completed successfully or failed. During this call, the registered callbacks will
@@ -191,6 +207,12 @@ private:
 
     /// The URL that this HttpRequest is going to request
     std::string _url;
+
+    /// Header fields that are sent with the request
+    std::vector<std::string> _requestHeaders;
+
+    /// The body of a POST request; a GET request is made if this is not set
+    std::optional<std::string> _postBody;
 
     /// The verbosity of the log message that is used if the download fails
     const logging::LogLevel _failureVerbosity;
@@ -236,6 +258,22 @@ public:
      *        replace any previously registered callback
      */
     void onProgress(HttpRequest::ProgressCallback progressCallback);
+
+    /**
+     * Adds a header field that is sent with the download's request. Has to be called
+     * before the download is started.
+     *
+     * \param header The header field in the form `Name: value`
+     */
+    void addRequestHeader(std::string header);
+
+    /**
+     * Makes the download's request a POST request that sends \p body. Has to be called
+     * before the download is started.
+     *
+     * \param body The body of the request
+     */
+    void setPostBody(std::string body);
 
     /**
      * Starts the asynchronous download of the file by starting a new thread that will

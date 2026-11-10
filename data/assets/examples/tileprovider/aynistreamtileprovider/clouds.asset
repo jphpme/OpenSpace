@@ -1,0 +1,28 @@
+-- Global Cloud Cover
+-- Adds an AYNI stream as a layer on a globe (Earth). The stream's frames hold cloud
+-- cover in percent; the layer colours them with the stream's palette and plays them
+-- mapped to the simulation time that the stream's latest release covers. Set the
+-- simulation time to the last weeks to see the clouds move.
+
+local earthAsset = asset.require("scene/solarsystem/planets/earth/globe")
+
+local Layer = {
+  Name = "Global Cloud Cover (AYNI)",
+  Type = "AyniStreamTileProvider",
+  Identifier = "AyniStream_Example_Clouds",
+  Enabled = true,
+  Url = "https://pachamama-studios.stream/global/realtime/noaa-sos/clouds/latest.json",
+  Description = [[
+    Global cloud cover from the AYNI stream host, updated every 10 minutes. Source:
+    NOAA Science On a Sphere.
+  ]]
+}
+
+
+asset.onInitialize(function()
+  openspace.globebrowsing.addLayer(earthAsset.Earth.Identifier, "ColorLayers", Layer)
+end)
+
+asset.onDeinitialize(function()
+  openspace.globebrowsing.deleteLayer(earthAsset.Earth.Identifier, "ColorLayers", Layer)
+end)

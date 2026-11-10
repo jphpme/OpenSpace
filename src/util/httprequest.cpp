@@ -26,6 +26,7 @@
 
 #include <openspace/format.h>
 #include <openspace/logging/logmanager.h>
+#include <openspace/misc/defer.h>
 #include <curl/curl.h>
 #include <array>
 #include <cstdint>
@@ -53,6 +54,14 @@ void HttpRequest::onHeader(HeaderCallback cb) {
     _onHeader = std::move(cb);
 }
 
+void HttpRequest::addRequestHeader(std::string header) {
+    _requestHeaders.push_back(std::move(header));
+}
+
+void HttpRequest::setPostBody(std::string body) {
+    _postBody = std::move(body);
+}
+
 bool HttpRequest::perform(std::chrono::milliseconds timeout) {
     CURL* curl = curl_easy_init();
     if (!curl) {
@@ -62,6 +71,23 @@ bool HttpRequest::perform(std::chrono::milliseconds timeout) {
     curl_easy_setopt(curl, CURLOPT_URL, _url.data());
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "OpenSpace");
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+
+    curl_slist* headers = nullptr;
+    defer { curl_slist_free_all(headers); };
+    for (const std::string& header : _requestHeaders) {
+        headers = curl_slist_append(headers, header.c_str());
+    }
+    if (headers) {
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    }
+    if (_postBody.has_value()) {
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, _postBody->data());
+        curl_easy_setopt(
+            curl,
+            CURLOPT_POSTFIELDSIZE_LARGE,
+            static_cast<curl_off_t>(_postBody->size())
+        );
+    }
 
     // The leading + in all of the lambda expressions are to cause an implicit conversion
     // to a standard C function pointer. Since the `curl_easy_setopt` function just takes
@@ -176,6 +202,14 @@ HttpDownload::~HttpDownload() {
 
 void HttpDownload::onProgress(HttpRequest::ProgressCallback progressCallback) {
     _onProgress = std::move(progressCallback);
+}
+
+void HttpDownload::addRequestHeader(std::string header) {
+    _httpRequest.addRequestHeader(std::move(header));
+}
+
+void HttpDownload::setPostBody(std::string body) {
+    _httpRequest.setPostBody(std::move(body));
 }
 
 bool HttpDownload::hasFailed() const {
