@@ -31,6 +31,7 @@
 #include <openspace/documentation/documentation.h>
 #include <openspace/engine/globals.h>
 #include <openspace/engine/moduleengine.h>
+#include <openspace/engine/windowdelegate.h>
 #include <openspace/filesystem/filesystem.h>
 #include <openspace/logging/logmanager.h>
 #include <openspace/misc/dictionary.h>
@@ -154,7 +155,10 @@ namespace {
     Dictionary videoPlayerDictionary(const ayni::Release& release) {
         const std::filesystem::path folder = absPath("${TEMPORARY}/ayni");
         std::filesystem::create_directories(folder);
-        const std::filesystem::path playlist = folder / (release.releaseId + ".edl");
+        // The nodes of a cluster can share the folder, so each writes its own file
+        const std::filesystem::path playlist = folder / std::format(
+            "{}-{}.edl", release.releaseId, global::windowDelegate->currentNode()
+        );
         {
             std::ofstream file = std::ofstream(playlist, std::ios::binary);
             file << ayni::edlPlaylist(release);
