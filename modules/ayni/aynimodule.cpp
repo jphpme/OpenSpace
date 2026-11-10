@@ -56,10 +56,9 @@ namespace {
         .identifier = "Playlist",
         .name = "Playlist",
         .description = "The streams, by their identifier in the stream host's "
-            "catalogue, that the next and previous stream actions show in turn, as the "
-            "VR controllers do. Streams that are not in the catalogue, or whose globe is "
-            "not in the scene, are skipped. If the list is empty, the actions go through "
-            "every stream.",
+            "catalogue, that the next and previous stream actions show in turn. Streams "
+            "that are not in the catalogue, or whose globe is not in the scene, are "
+            "skipped. If the list is empty, the actions go through every stream.",
         .visibility = openspace::Visibility::User
     };
 } // namespace

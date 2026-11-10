@@ -209,6 +209,10 @@ AyniStreamTileProvider::AyniStreamTileProvider(const Dictionary& dictionary)
 
 AyniStreamTileProvider::~AyniStreamTileProvider() = default;
 
+const ayni::Release& AyniStreamTileProvider::release() const {
+    return _release;
+}
+
 void AyniStreamTileProvider::internalInitialize() {
     ZoneScoped;
 

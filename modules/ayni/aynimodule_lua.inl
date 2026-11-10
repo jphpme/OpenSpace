@@ -23,6 +23,7 @@
  ****************************************************************************************/
 
 #include <modules/ayni/src/aynicatalogue.h>
+#include <modules/ayni/src/aynistreamtileprovider.h>
 #include <modules/globebrowsing/src/layer.h>
 #include <modules/globebrowsing/src/layergroup.h>
 #include <modules/globebrowsing/src/layergroupid.h>
@@ -30,13 +31,18 @@
 #include <modules/globebrowsing/src/renderableglobe.h>
 #include <openspace/engine/globals.h>
 #include <openspace/engine/moduleengine.h>
+#include <openspace/engine/windowdelegate.h>
 #include <openspace/lua/lua_helper.h>
 #include <openspace/misc/dictionary.h>
 #include <openspace/misc/exception.h>
 #include <openspace/rendering/renderengine.h>
 #include <openspace/scene/scene.h>
 #include <openspace/scene/scenegraphnode.h>
+#include <openspace/scripting/scriptengine.h>
+#include <openspace/util/ellipsoid.h>
+#include <openspace/util/geodetic.h>
 #include <algorithm>
+#include <cmath>
 #include <format>
 #include <string>
 #include <vector>
@@ -81,6 +87,32 @@ namespace {
         }
     }
 
+    // Flies the camera to where it sees all of the map that the layer plays, as
+    // `GeoJsonComponent::flyToFeature` does for a feature
+    void flyToMap(const std::string& globeIdentifier, const RenderableGlobe& globe,
+                  const Layer& layer)
+    {
+        const AyniStreamTileProvider* provider =
+            dynamic_cast<const AyniStreamTileProvider*>(layer.tileProvider());
+        if (!provider || !provider->release().valueEncoding.has_value()) {
+            return;
+        }
+        const ayni::ValueEncoding& enc = *provider->release().valueEncoding;
+        const double diagonal = globe.ellipsoid().greatCircleDistance(
+            Geodetic2 { glm::radians(enc.latBottom), glm::radians(enc.lonLeft) },
+            Geodetic2 { glm::radians(enc.latTop), glm::radians(enc.lonRight) }
+        );
+        // Assumes an 80 degree field of view
+        const double altitude = diagonal / std::tan(glm::radians(40.0));
+        global::scriptEngine->queueScript(std::format(
+            "openspace.navigation.flyToGeo([[{}]], {}, {}, {})",
+            globeIdentifier,
+            (enc.latTop + enc.latBottom) / 2.0,
+            (enc.lonLeft + enc.lonRight) / 2.0,
+            altitude
+        ));
+    }
+
     std::string show(const ayni::CatalogueStream& stream) {
         RenderableGlobe* globe = globeNamed(stream.globe);
         if (!globe) {
@@ -118,6 +150,11 @@ namespace {
             ));
         }
         added->initialize();
+        // A regional stream covers a small part of its globe. The master's camera path
+        // reaches the other nodes of a cluster through the synchronized script
+        if (!stream.region.empty() && global::windowDelegate->isMaster()) {
+            flyToMap(stream.globe, *globe, *added);
+        }
         ayniModule().setShownStream(stream.identifier);
         return stream.name;
     }
@@ -147,7 +184,8 @@ namespace {
 
 /**
  * Shows an AYNI stream on the globe it covers and removes the AYNI stream shown before,
- * so that one stream plays at a time. Licensed streams need a connection file of an AYNI
+ * so that one stream plays at a time. For a regional stream, the camera flies to the
+ * region. Licensed streams need a connection file of an AYNI
  * XR plan, for OpenSpace or for a node, in `${USER}/ayni/connection.json`.
  *
  * \param identifier The stream's identifier, as `openspace.ayni.streams` lists it
@@ -178,7 +216,8 @@ namespace {
 
 /**
  * Shows the stream after the one shown last in the playlist (`Modules.Ayni.Playlist`),
- * or before it if \p step is negative, and removes the stream shown before. Streams whose
+ * or before it if \p step is negative, and removes the stream shown before. For a
+ * regional stream, the camera flies to the region. Streams whose
  * globe is not in the scene are skipped. If the playlist is empty, every stream of the
  * catalogue takes its turn.
  *
